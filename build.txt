@@ -1,0 +1,3 @@
+displayName = Recursive Craft
+author = Gaelyte
+version = 1.0
