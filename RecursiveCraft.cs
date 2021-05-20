@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using Microsoft.Xna.Framework;
@@ -9,7 +8,6 @@ using MonoMod.Cil;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
-using Terraria.ModLoader.Config;
 using ILRecipe = IL.Terraria.Recipe;
 using OnMain = On.Terraria.Main;
 
@@ -17,13 +15,13 @@ namespace RecursiveCraft
 {
 	public class RecursiveCraft : Mod
 	{
-		public static Dictionary<int, List<Recipe>> recipeByResult;
-		public static Dictionary<Recipe, Dictionary<int, int>> recipeCache;
-		public static CompoundRecipe currentCompound;
+		public static Dictionary<int, List<Recipe>> RecipeByResult;
+		public static Dictionary<Recipe, Dictionary<int, int>> RecipeCache;
+		public static CompoundRecipe CurrentCompound;
 
-		public static int depthSearch;
-		public static bool inventoryWasOpen;
-		public static ModHotKey[] hotkeys;
+		public static int DepthSearch;
+		public static bool InventoryWasOpen;
+		public static ModHotKey[] Hotkeys;
 
 		public override void Load()
 		{
@@ -31,10 +29,10 @@ namespace RecursiveCraft
 			OnMain.DrawInventory += EditFocusRecipe;
 			OnMain.Update += ApplyKey;
 			On.Terraria.Recipe.Create += CraftCompoundRecipe;
-			recipeByResult = new Dictionary<int, List<Recipe>>();
-			recipeCache = new Dictionary<Recipe, Dictionary<int, int>>();
+			RecipeByResult = new Dictionary<int, List<Recipe>>();
+			RecipeCache = new Dictionary<Recipe, Dictionary<int, int>>();
 
-			hotkeys = new[]
+			Hotkeys = new[]
 			{
 				RegisterHotKey("Infinite crafting depth", "Home"),
 				RegisterHotKey("+1 crafting depth", "PageUp"),
@@ -49,13 +47,13 @@ namespace RecursiveCraft
 			OnMain.DrawInventory -= EditFocusRecipe;
 			OnMain.Update -= ApplyKey;
 			On.Terraria.Recipe.Create -= CraftCompoundRecipe;
-			recipeByResult = null;
-			recipeCache = null;
-			hotkeys = null;
+			RecipeByResult = null;
+			RecipeCache = null;
+			Hotkeys = null;
 
-			if (currentCompound != null)
-				Main.recipe[currentCompound.recipeId] = currentCompound.overridenRecipe;
-			currentCompound = null;
+			if (CurrentCompound != null)
+				Main.recipe[CurrentCompound.RecipeId] = CurrentCompound.OverridenRecipe;
+			CurrentCompound = null;
 		}
 
 		public override void PostAddRecipes()
@@ -63,10 +61,10 @@ namespace RecursiveCraft
 			foreach (Recipe recipe in Main.recipe)
 			{
 				int type = recipe.createItem.type;
-				if (!recipeByResult.TryGetValue(type, out List<Recipe> list))
+				if (!RecipeByResult.TryGetValue(type, out List<Recipe> list))
 				{
 					list = new List<Recipe>();
-					recipeByResult.Add(type, list);
+					RecipeByResult.Add(type, list);
 				}
 
 				list.Add(recipe);
@@ -76,69 +74,69 @@ namespace RecursiveCraft
 		public static void CraftCompoundRecipe(On.Terraria.Recipe.orig_Create orig, Recipe self)
 		{
 			orig(self);
-			if (currentCompound != null && self == currentCompound.currentRecipe)
+			if (CurrentCompound != null && self == CurrentCompound.CurrentRecipe)
 			{
-				currentCompound.OnCraft();
+				CurrentCompound.OnCraft();
 				Recipe.FindRecipes();
 			}
 		}
 
-		public void ApplyKey(OnMain.orig_Update orig, Main self, GameTime gametime)
+		public void ApplyKey(OnMain.orig_Update orig, Main self, GameTime gameTime)
 		{
-			if (inventoryWasOpen != Main.playerInventory)
+			if (InventoryWasOpen != Main.playerInventory)
 			{
-				inventoryWasOpen = !inventoryWasOpen;
-				depthSearch = ((RecursiveSettings) GetConfig("RecursiveSettings")).DefaultDepth;
+				InventoryWasOpen = !InventoryWasOpen;
+				DepthSearch = ((RecursiveSettings) GetConfig("RecursiveSettings")).DefaultDepth;
 			}
 
-			if (inventoryWasOpen)
+			if (InventoryWasOpen)
 			{
-				int oldDepth = depthSearch;
-				if (hotkeys[0].JustPressed)
+				int oldDepth = DepthSearch;
+				if (Hotkeys[0].JustPressed)
 				{
-					depthSearch = -1;
+					DepthSearch = -1;
 				}
-				else if (hotkeys[1].JustPressed)
+				else if (Hotkeys[1].JustPressed)
 				{
-					if (depthSearch == -1)
-						depthSearch = 5;
+					if (DepthSearch == -1)
+						DepthSearch = 5;
 					else
-						depthSearch++;
+						DepthSearch++;
 				}
-				else if (hotkeys[2].JustPressed)
+				else if (Hotkeys[2].JustPressed)
 				{
-					if (depthSearch == 0)
-						depthSearch = 0;
-					else if (depthSearch == 5)
-						depthSearch = -1;
+					if (DepthSearch == 0)
+						DepthSearch = 0;
+					else if (DepthSearch == 5)
+						DepthSearch = -1;
 					else
-						depthSearch++;
+						DepthSearch++;
 				}
-				else if (hotkeys[3].JustPressed)
+				else if (Hotkeys[3].JustPressed)
 				{
-					depthSearch = 0;
+					DepthSearch = 0;
 				}
 
-				if (oldDepth != depthSearch)
+				if (oldDepth != DepthSearch)
 					Recipe.FindRecipes();
 			}
 
-			orig(self, gametime);
+			orig(self, gameTime);
 		}
 
 		public static void EditFocusRecipe(OnMain.orig_DrawInventory orig, Main self)
 		{
-			if (currentCompound != null) Main.recipe[currentCompound.recipeId] = currentCompound.overridenRecipe;
+			if (CurrentCompound != null) Main.recipe[CurrentCompound.RecipeId] = CurrentCompound.OverridenRecipe;
 			int i = Main.availableRecipe[Main.focusRecipe];
 			Recipe recipe = Main.recipe[i];
-			if (recipeCache.TryGetValue(recipe, out Dictionary<int, int> dictionary))
+			if (RecipeCache.TryGetValue(recipe, out Dictionary<int, int> dictionary))
 			{
-				currentCompound = new CompoundRecipe(i, dictionary);
-				Main.recipe[i] = currentCompound.currentRecipe;
+				CurrentCompound = new CompoundRecipe(i, dictionary);
+				Main.recipe[i] = CurrentCompound.CurrentRecipe;
 			}
 			else
 			{
-				currentCompound = null;
+				CurrentCompound = null;
 			}
 
 			orig(self);
@@ -170,63 +168,49 @@ namespace RecursiveCraft
 			cursor.MarkLabel(label);
 		}
 
-		public static void RecursiveSearch(Dictionary<int, int> dictionary)
+		public static void RecursiveSearch(Dictionary<int, int> inventory)
 		{
-			recipeCache.Clear();
+			RecipeCache.Clear();
+			CraftingSource craftingSource = new PlayerAsCraftingSource();
 			for (int n = 0; n < Recipe.maxRecipes && Main.recipe[n].createItem.type != ItemID.None; n++)
-				SearchRecipe(dictionary, n);
+			{
+				Recipe recipe = CurrentCompound?.RecipeId == n ? CurrentCompound.OverridenRecipe : Main.recipe[n];
+				Dictionary<int, int> usedItems = FindIngredientsForRecipe(inventory, craftingSource, recipe);
+				if (usedItems != null)
+				{
+					RecipeCache.Add(recipe, usedItems);
+					Main.availableRecipe[Main.numAvailableRecipes++] = n;
+				}
+			}
 		}
 
-		public static void SearchRecipe(Dictionary<int, int> dictionary, int n)
+		public static Dictionary<int, int> FindIngredientsForRecipe(Dictionary<int, int> dictionary,
+			CraftingSource craftingSource, Recipe recipe)
 		{
-			Recipe recipe = currentCompound?.recipeId == n ? currentCompound.overridenRecipe : Main.recipe[n];
 			Dictionary<int, int> inventoryToUse = new Dictionary<int, int>(dictionary);
 			Dictionary<int, int> inventoryOnceUsed = inventoryToUse;
 			List<int> craftedItems = new List<int>();
-			if (AmountOfDoableRecipe(ref inventoryOnceUsed, recipe.createItem.stack, recipe, craftedItems, 0) ==
-			    0) return;
-			if (inventoryOnceUsed != inventoryToUse)
-			{
-				Dictionary<int, int> usedItems = new Dictionary<int, int>();
-				foreach (KeyValuePair<int, int> keyValuePair in inventoryOnceUsed)
-				{
-					if (!inventoryToUse.TryGetValue(keyValuePair.Key, out int amount))
-						amount = 0;
-					amount -= keyValuePair.Value;
-					if (amount != 0)
-						usedItems.Add(keyValuePair.Key, amount);
-				}
 
-				recipeCache.Add(recipe, usedItems);
+			if (AmountOfDoableRecipe(ref inventoryOnceUsed, craftingSource, recipe.createItem.stack, recipe,
+				craftedItems, 0) == 0) return null;
+
+			Dictionary<int, int> usedItems = new Dictionary<int, int>();
+			foreach (KeyValuePair<int, int> keyValuePair in inventoryOnceUsed)
+			{
+				if (!inventoryToUse.TryGetValue(keyValuePair.Key, out int amount))
+					amount = 0;
+				amount -= keyValuePair.Value;
+				if (amount != 0)
+					usedItems.Add(keyValuePair.Key, amount);
 			}
 
-			Main.availableRecipe[Main.numAvailableRecipes++] = n;
+			return usedItems;
 		}
 
-		public static int AmountOfDoableRecipe(ref Dictionary<int, int> inventoryToUse, int amount, Recipe recipe,
-			List<int> craftedItems, int depth)
+		public static int AmountOfDoableRecipe(ref Dictionary<int, int> inventoryToUse, CraftingSource craftingSource,
+			int amount, Recipe recipe, List<int> craftedItems, int depth)
 		{
-			#region IsAvailable
-
-			if (!RecipeHooks.RecipeAvailable(recipe))
-				return 0;
-			for (int craftingStation = 0;
-				craftingStation < Recipe.maxRequirements && recipe.requiredTile[craftingStation] != -1;
-				craftingStation++)
-				if (!Main.player[Main.myPlayer].adjTile[recipe.requiredTile[craftingStation]])
-					return 0;
-
-			if (recipe.needWater && !Main.player[Main.myPlayer].adjWater &&
-			    !Main.player[Main.myPlayer].adjTile[172])
-				return 0;
-			if (recipe.needHoney && !Main.player[Main.myPlayer].adjHoney)
-				return 0;
-			if (recipe.needLava && !Main.player[Main.myPlayer].adjLava)
-				return 0;
-			if (recipe.needSnowBiome && !Main.player[Main.myPlayer].ZoneSnow)
-				return 0;
-
-			#endregion
+			if (!IsAvailable(recipe, craftingSource)) return 0;
 
 			Dictionary<int, int> inventoryOnceUsed =
 				inventoryToUse.ToDictionary(keyValuePair => keyValuePair.Key, keyValuePair => keyValuePair.Value);
@@ -250,18 +234,21 @@ namespace RecursiveCraft
 
 				List<int> ingredientList = new List<int>();
 
+				#region ListAllPossibleIngredients
+
 				foreach (int validItem in recipeAcceptedGroups
 					.Select(recipeAcceptedGroup => RecipeGroup.recipeGroups[recipeAcceptedGroup])
 					.Where(recipeGroup => recipeGroup.ContainsItem(ingredient.netID)).SelectMany(recipeGroup =>
-						recipeGroup.ValidItems.Where(validItem =>
-							!craftedItemsOnceUsed.Contains(ingredient.type) && !ingredientList.Contains(validItem))))
+						recipeGroup.ValidItems.Where(validItem => !ingredientList.Contains(validItem))))
 					ingredientList.Add(validItem);
 
 				if (ingredientList.Count == 0)
 					ingredientList.Add(ingredient.type);
 
+				#endregion
+
 				if (depth != 0)
-					ingredientList.RemoveAll(i => craftedItemsOnceUsed.Contains(i));
+					ingredientList.RemoveAll(craftedItems.Contains);
 
 				foreach (int validItem in ingredientList)
 					if (inventoryOnceUsed.TryGetValue(validItem, out int availableAmount))
@@ -270,7 +257,7 @@ namespace RecursiveCraft
 						inventoryOnceUsed[validItem] -= usedAmount;
 						ingredientsNeeded -= usedAmount;
 
-						if (ingredientsNeeded <= 0)
+						if (ingredientsNeeded == 0)
 							break;
 					}
 
@@ -280,14 +267,14 @@ namespace RecursiveCraft
 				{
 					#region Recursive part
 
-					if (depthSearch - depth != 0)
+					if (DepthSearch - depth != 0)
 						foreach (int validItem in ingredientList)
 						{
 							if (!craftedItemsOnceUsed.Contains(validItem) &&
-							    recipeByResult.TryGetValue(validItem, out List<Recipe> usableRecipes))
+							    RecipeByResult.TryGetValue(validItem, out List<Recipe> usableRecipes))
 								foreach (Recipe ingredientRecipe in usableRecipes)
 								{
-									ingredientsNeeded -= AmountOfDoableRecipe(ref inventoryOnceUsed,
+									ingredientsNeeded -= AmountOfDoableRecipe(ref inventoryOnceUsed, craftingSource,
 										ingredientsNeeded, ingredientRecipe, craftedItemsOnceUsed, depth + 1);
 									if (ingredientsNeeded <= 0)
 										break;
@@ -313,8 +300,8 @@ namespace RecursiveCraft
 			}
 			else if (amount > timeCraft * recipe.createItem.stack)
 			{
-				return AmountOfDoableRecipe(ref inventoryToUse, timeCraft * recipe.createItem.stack, recipe,
-					craftedItems, depth);
+				return AmountOfDoableRecipe(ref inventoryToUse, craftingSource, timeCraft * recipe.createItem.stack,
+					recipe, craftedItems, depth);
 			}
 			else
 			{
@@ -330,53 +317,28 @@ namespace RecursiveCraft
 				return amount;
 			}
 		}
-	}
 
-	public class RecursiveSettings : ModConfig
-	{
-		[Label("Max recursive depth")]
-		[Tooltip("Max number of different recipes that can be used to obtain an ingredient")]
-		[DefaultValue(-1)]
-		[Range(-1, 5)]
-		public int DefaultDepth;
-
-		public override ConfigScope Mode => ConfigScope.ClientSide;
-	}
-
-	public class CompoundRecipe
-	{
-		public Recipe currentRecipe;
-		public Dictionary<int, int> dropItems;
-		public Recipe overridenRecipe;
-		public int recipeId;
-
-		public CompoundRecipe(int recipeId, Dictionary<int, int> dictionary)
+		private static bool IsAvailable(Recipe recipe, CraftingSource craftingSource)
 		{
-			this.recipeId = recipeId;
-			overridenRecipe = Main.recipe[recipeId];
-			currentRecipe = new Recipe {createItem = overridenRecipe.createItem, alchemy = overridenRecipe.alchemy};
-			dropItems = new Dictionary<int, int>();
-			List<KeyValuePair<int, int>> keyValuePairs = dictionary.ToList();
-			keyValuePairs.Reverse();
-			int i = 0;
-			foreach (KeyValuePair<int, int> keyValuePair in keyValuePairs)
-				if (keyValuePair.Value < 0)
-				{
-					dropItems.Add(keyValuePair.Key, -keyValuePair.Value);
-				}
-				else
-				{
-					currentRecipe.requiredItem[i] = new Item();
-					currentRecipe.requiredItem[i].SetDefaults(keyValuePair.Key);
-					currentRecipe.requiredItem[i].stack = keyValuePair.Value;
-					++i;
-				}
-		}
+			if (!RecipeHooks.RecipeAvailable(recipe))
+				return false;
+			for (int craftingStation = 0;
+				craftingStation < Recipe.maxRequirements && recipe.requiredTile[craftingStation] != -1;
+				craftingStation++)
+				if (!craftingSource.AdjTile[recipe.requiredTile[craftingStation]])
+					return false;
 
-		public void OnCraft()
-		{
-			foreach (KeyValuePair<int, int> keyValuePair in dropItems)
-				Main.player[Main.myPlayer].QuickSpawnItem(keyValuePair.Key, keyValuePair.Value);
+			if (recipe.needWater && !craftingSource.AdjWater &&
+			    !craftingSource.AdjTile[172])
+				return false;
+			if (recipe.needHoney && !craftingSource.AdjHoney)
+				return false;
+			if (recipe.needLava && !craftingSource.AdjLava)
+				return false;
+			if (recipe.needSnowBiome && !craftingSource.ZoneSnow)
+				return false;
+
+			return true;
 		}
 	}
 }
