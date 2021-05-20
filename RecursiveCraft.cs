@@ -16,7 +16,7 @@ namespace RecursiveCraft
 	public class RecursiveCraft : Mod
 	{
 		public static Dictionary<int, List<Recipe>> RecipeByResult;
-		public static Dictionary<Recipe, Dictionary<int, int>> RecipeCache;
+		public static Dictionary<Recipe, RecipeInfo> RecipeCache;
 		public static CompoundRecipe CurrentCompound;
 
 		public static int DepthSearch;
@@ -30,7 +30,7 @@ namespace RecursiveCraft
 			OnMain.Update += ApplyKey;
 			On.Terraria.Recipe.Create += CraftCompoundRecipe;
 			RecipeByResult = new Dictionary<int, List<Recipe>>();
-			RecipeCache = new Dictionary<Recipe, Dictionary<int, int>>();
+			RecipeCache = new Dictionary<Recipe, RecipeInfo>();
 
 			Hotkeys = new[]
 			{
@@ -73,11 +73,16 @@ namespace RecursiveCraft
 
 		public static void CraftCompoundRecipe(On.Terraria.Recipe.orig_Create orig, Recipe self)
 		{
-			orig(self);
 			if (CurrentCompound != null && self == CurrentCompound.CurrentRecipe)
 			{
+				CurrentCompound.BeforeCraft();
+				orig(self);
 				CurrentCompound.OnCraft();
 				Recipe.FindRecipes();
+			}
+			else
+			{
+				orig(self);
 			}
 		}
 
@@ -129,9 +134,9 @@ namespace RecursiveCraft
 			if (CurrentCompound != null) Main.recipe[CurrentCompound.RecipeId] = CurrentCompound.OverridenRecipe;
 			int i = Main.availableRecipe[Main.focusRecipe];
 			Recipe recipe = Main.recipe[i];
-			if (RecipeCache.TryGetValue(recipe, out Dictionary<int, int> dictionary))
+			if (RecipeCache.TryGetValue(recipe, out RecipeInfo recipeInfo))
 			{
-				CurrentCompound = new CompoundRecipe(i, dictionary);
+				CurrentCompound = new CompoundRecipe(i, recipeInfo);
 				Main.recipe[i] = CurrentCompound.CurrentRecipe;
 			}
 			else
@@ -175,24 +180,27 @@ namespace RecursiveCraft
 			for (int n = 0; n < Recipe.maxRecipes && Main.recipe[n].createItem.type != ItemID.None; n++)
 			{
 				Recipe recipe = CurrentCompound?.RecipeId == n ? CurrentCompound.OverridenRecipe : Main.recipe[n];
-				Dictionary<int, int> usedItems = FindIngredientsForRecipe(inventory, craftingSource, recipe);
-				if (usedItems != null)
+				RecipeInfo recipeInfo = FindIngredientsForRecipe(inventory, craftingSource, recipe);
+				if (recipeInfo != null)
 				{
-					RecipeCache.Add(recipe, usedItems);
+					if (recipeInfo.RecipeUsed.Count > 1)
+						RecipeCache.Add(recipe, recipeInfo);
 					Main.availableRecipe[Main.numAvailableRecipes++] = n;
 				}
 			}
 		}
 
-		public static Dictionary<int, int> FindIngredientsForRecipe(Dictionary<int, int> dictionary,
+		public static RecipeInfo FindIngredientsForRecipe(Dictionary<int, int> dictionary,
 			CraftingSource craftingSource, Recipe recipe)
 		{
 			Dictionary<int, int> inventoryToUse = new Dictionary<int, int>(dictionary);
 			Dictionary<int, int> inventoryOnceUsed = inventoryToUse;
+			Dictionary<int, int> trueInventoryOnceUsed = inventoryToUse;
+			Dictionary<Recipe, int> recipeUsed = new Dictionary<Recipe, int>();
 			List<int> craftedItems = new List<int>();
 
-			if (AmountOfDoableRecipe(ref inventoryOnceUsed, craftingSource, recipe.createItem.stack, recipe,
-				craftedItems, 0) == 0) return null;
+			if (AmountOfDoableRecipe(ref inventoryOnceUsed, ref trueInventoryOnceUsed, ref recipeUsed, craftingSource,
+				recipe.createItem.stack, recipe.createItem.stack, recipe, craftedItems, 0) == 0) return null;
 
 			Dictionary<int, int> usedItems = new Dictionary<int, int>();
 			foreach (KeyValuePair<int, int> keyValuePair in inventoryOnceUsed)
@@ -204,16 +212,33 @@ namespace RecursiveCraft
 					usedItems.Add(keyValuePair.Key, amount);
 			}
 
-			return usedItems;
+			Dictionary<int, int> trueUsedItems = new Dictionary<int, int>();
+			foreach (KeyValuePair<int, int> keyValuePair in trueInventoryOnceUsed)
+			{
+				if (!inventoryToUse.TryGetValue(keyValuePair.Key, out int amount))
+					amount = 0;
+				amount -= keyValuePair.Value;
+				if (amount != 0)
+					trueUsedItems.Add(keyValuePair.Key, amount);
+			}
+
+			return new RecipeInfo(usedItems, trueUsedItems, recipeUsed);
 		}
 
-		public static int AmountOfDoableRecipe(ref Dictionary<int, int> inventoryToUse, CraftingSource craftingSource,
-			int amount, Recipe recipe, List<int> craftedItems, int depth)
+		//Every "true" variable is the same as the normal one except when alchemy table is used,
+		//saving ingredients while not showing it to the player.
+		public static int AmountOfDoableRecipe(ref Dictionary<int, int> inventoryToUse,
+			ref Dictionary<int, int> trueInventoryToUse, ref Dictionary<Recipe, int> recipeUsed,
+			CraftingSource craftingSource, int amount, int trueAmount, Recipe recipe, List<int> craftedItems, int depth)
 		{
 			if (!IsAvailable(recipe, craftingSource)) return 0;
 
 			Dictionary<int, int> inventoryOnceUsed =
 				inventoryToUse.ToDictionary(keyValuePair => keyValuePair.Key, keyValuePair => keyValuePair.Value);
+			Dictionary<int, int> trueInventoryOnceUsed =
+				trueInventoryToUse.ToDictionary(keyValuePair => keyValuePair.Key, keyValuePair => keyValuePair.Value);
+			Dictionary<Recipe, int> currentRecipeUsed =
+				recipeUsed.ToDictionary(keyValuePair => keyValuePair.Key, keyValuePair => keyValuePair.Value);
 			List<int> craftedItemsOnceUsed = craftedItems.ToList();
 			if (!craftedItemsOnceUsed.Contains(recipe.createItem.type))
 				craftedItemsOnceUsed.Add(recipe.createItem.type);
@@ -223,12 +248,18 @@ namespace RecursiveCraft
 			List<int> recipeAcceptedGroups = (List<int>) getAcceptedGroups.Invoke(null, new object[] {recipe});
 
 			int timeCraft = (amount + recipe.createItem.stack - 1) / recipe.createItem.stack;
+			int trueTimeCraft = (trueAmount + recipe.createItem.stack - 1) / recipe.createItem.stack;
 			for (int numIngredient = 0; numIngredient < Recipe.maxRequirements; numIngredient++)
 			{
 				Item ingredient = recipe.requiredItem[numIngredient];
 				if (ingredient.type == ItemID.None) break;
 
 				int ingredientsNeeded = timeCraft * ingredient.stack;
+				int trueIngredientsNeeded = trueTimeCraft * ingredient.stack;
+				if (recipe.alchemy && craftingSource.AlchemyTable)
+					for (int i = 0; i < trueTimeCraft; i++)
+						if(Main.rand.Next(3) == 0)
+							trueIngredientsNeeded -= ingredient.stack;
 
 				#region UseIngredients
 
@@ -257,6 +288,10 @@ namespace RecursiveCraft
 						inventoryOnceUsed[validItem] -= usedAmount;
 						ingredientsNeeded -= usedAmount;
 
+						usedAmount = Math.Min(trueIngredientsNeeded, availableAmount);
+						trueInventoryOnceUsed[validItem] -= usedAmount;
+						trueIngredientsNeeded -= usedAmount;
+
 						if (ingredientsNeeded == 0)
 							break;
 					}
@@ -274,8 +309,10 @@ namespace RecursiveCraft
 							    RecipeByResult.TryGetValue(validItem, out List<Recipe> usableRecipes))
 								foreach (Recipe ingredientRecipe in usableRecipes)
 								{
-									ingredientsNeeded -= AmountOfDoableRecipe(ref inventoryOnceUsed, craftingSource,
-										ingredientsNeeded, ingredientRecipe, craftedItemsOnceUsed, depth + 1);
+									ingredientsNeeded -= AmountOfDoableRecipe(ref inventoryOnceUsed,
+										ref trueInventoryOnceUsed, ref currentRecipeUsed, craftingSource,
+										ingredientsNeeded, trueIngredientsNeeded, ingredientRecipe,
+										craftedItemsOnceUsed, depth + 1);
 									if (ingredientsNeeded <= 0)
 										break;
 								}
@@ -300,7 +337,9 @@ namespace RecursiveCraft
 			}
 			else if (amount > timeCraft * recipe.createItem.stack)
 			{
-				return AmountOfDoableRecipe(ref inventoryToUse, craftingSource, timeCraft * recipe.createItem.stack,
+				trueTimeCraft = Math.Min(timeCraft, trueTimeCraft);
+				return AmountOfDoableRecipe(ref inventoryToUse, ref trueInventoryToUse, ref currentRecipeUsed,
+					craftingSource, timeCraft * recipe.createItem.stack, trueTimeCraft * recipe.createItem.stack,
 					recipe, craftedItems, depth);
 			}
 			else
@@ -313,12 +352,29 @@ namespace RecursiveCraft
 						inventoryOnceUsed.Add(recipe.createItem.type, timeCraft * recipe.createItem.stack - amount);
 				}
 
+				if (trueAmount < trueTimeCraft * recipe.createItem.stack)
+				{
+					if (trueInventoryOnceUsed.ContainsKey(recipe.createItem.type))
+						trueInventoryOnceUsed[recipe.createItem.type] +=
+							trueTimeCraft * recipe.createItem.stack - trueAmount;
+					else
+						trueInventoryOnceUsed.Add(recipe.createItem.type,
+							trueTimeCraft * recipe.createItem.stack - trueAmount);
+				}
+
+				if (currentRecipeUsed.ContainsKey(recipe))
+					currentRecipeUsed[recipe] += trueTimeCraft;
+				else
+					currentRecipeUsed.Add(recipe, trueTimeCraft);
+
 				inventoryToUse = inventoryOnceUsed;
+				trueInventoryToUse = trueInventoryOnceUsed;
+				recipeUsed = currentRecipeUsed;
 				return amount;
 			}
 		}
 
-		private static bool IsAvailable(Recipe recipe, CraftingSource craftingSource)
+		public static bool IsAvailable(Recipe recipe, CraftingSource craftingSource)
 		{
 			if (!RecipeHooks.RecipeAvailable(recipe))
 				return false;

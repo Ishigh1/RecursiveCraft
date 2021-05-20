@@ -9,6 +9,7 @@ namespace RecursiveCraft
 		public abstract bool AdjHoney{ get; }
 		public abstract bool AdjLava{ get; }
 		public abstract bool ZoneSnow{ get; }
+		public abstract bool AlchemyTable { get; }
 	}
 
 	public class PlayerAsCraftingSource : CraftingSource
@@ -18,5 +19,6 @@ namespace RecursiveCraft
 		public override bool AdjHoney => Main.LocalPlayer.adjHoney;
 		public override bool AdjLava => Main.LocalPlayer.adjLava;
 		public override bool ZoneSnow => Main.LocalPlayer.ZoneSnow;
+		public override bool AlchemyTable => Main.LocalPlayer.alchemyTable;
 	}
 }
