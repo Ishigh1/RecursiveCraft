@@ -17,7 +17,7 @@ namespace RecursiveCraft
 	{
 		public static Dictionary<int, List<Recipe>> RecipeByResult;
 		public static Dictionary<Recipe, RecipeInfo> RecipeCache;
-		public static CompoundRecipe CurrentCompound;
+		public static CompoundRecipe CompoundRecipe;
 
 		public static int DepthSearch;
 		public static bool InventoryWasOpen;
@@ -28,7 +28,6 @@ namespace RecursiveCraft
 			ILRecipe.FindRecipes += ApplyRecursiveSearch;
 			OnMain.DrawInventory += EditFocusRecipe;
 			OnMain.Update += ApplyKey;
-			On.Terraria.Recipe.Create += CraftCompoundRecipe;
 			RecipeByResult = new Dictionary<int, List<Recipe>>();
 			RecipeCache = new Dictionary<Recipe, RecipeInfo>();
 
@@ -46,18 +45,19 @@ namespace RecursiveCraft
 			ILRecipe.FindRecipes -= ApplyRecursiveSearch;
 			OnMain.DrawInventory -= EditFocusRecipe;
 			OnMain.Update -= ApplyKey;
-			On.Terraria.Recipe.Create -= CraftCompoundRecipe;
 			RecipeByResult = null;
 			RecipeCache = null;
 			Hotkeys = null;
 
-			if (CurrentCompound != null)
-				Main.recipe[CurrentCompound.RecipeId] = CurrentCompound.OverridenRecipe;
-			CurrentCompound = null;
+			if (CompoundRecipe.OverridenRecipe != null)
+				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
+			CompoundRecipe = null;
 		}
 
 		public override void PostAddRecipes()
 		{
+			CompoundRecipe = new CompoundRecipe(this);
+			
 			foreach (Recipe recipe in Main.recipe)
 			{
 				int type = recipe.createItem.type;
@@ -68,21 +68,6 @@ namespace RecursiveCraft
 				}
 
 				list.Add(recipe);
-			}
-		}
-
-		public static void CraftCompoundRecipe(On.Terraria.Recipe.orig_Create orig, Recipe self)
-		{
-			if (CurrentCompound != null && self == CurrentCompound.CurrentRecipe)
-			{
-				CurrentCompound.BeforeCraft();
-				orig(self);
-				CurrentCompound.OnCraft();
-				Recipe.FindRecipes();
-			}
-			else
-			{
-				orig(self);
 			}
 		}
 
@@ -131,17 +116,17 @@ namespace RecursiveCraft
 
 		public static void EditFocusRecipe(OnMain.orig_DrawInventory orig, Main self)
 		{
-			if (CurrentCompound != null) Main.recipe[CurrentCompound.RecipeId] = CurrentCompound.OverridenRecipe;
+			if (CompoundRecipe.OverridenRecipe != null) Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
 			int i = Main.availableRecipe[Main.focusRecipe];
 			Recipe recipe = Main.recipe[i];
 			if (RecipeCache.TryGetValue(recipe, out RecipeInfo recipeInfo))
 			{
-				CurrentCompound = new CompoundRecipe(i, recipeInfo);
-				Main.recipe[i] = CurrentCompound.CurrentRecipe;
+				CompoundRecipe.Apply(i, recipeInfo);
+				Main.recipe[i] = CompoundRecipe;
 			}
 			else
 			{
-				CurrentCompound = null;
+				CompoundRecipe.OverridenRecipe = null;
 			}
 
 			orig(self);
@@ -179,7 +164,9 @@ namespace RecursiveCraft
 			CraftingSource craftingSource = new PlayerAsCraftingSource();
 			for (int n = 0; n < Recipe.maxRecipes && Main.recipe[n].createItem.type != ItemID.None; n++)
 			{
-				Recipe recipe = CurrentCompound?.RecipeId == n ? CurrentCompound.OverridenRecipe : Main.recipe[n];
+				Recipe recipe = Main.recipe[n];
+				if (recipe is CompoundRecipe compoundRecipe)
+					recipe = compoundRecipe.OverridenRecipe;
 				RecipeInfo recipeInfo = FindIngredientsForRecipe(inventory, craftingSource, recipe);
 				if (recipeInfo != null)
 				{
@@ -258,7 +245,7 @@ namespace RecursiveCraft
 				int trueIngredientsNeeded = trueTimeCraft * ingredient.stack;
 				if (recipe.alchemy && craftingSource.AlchemyTable)
 					for (int i = 0; i < trueTimeCraft; i++)
-						if(Main.rand.Next(3) == 0)
+						if (Main.rand.Next(3) == 0)
 							trueIngredientsNeeded -= ingredient.stack;
 
 				#region UseIngredients

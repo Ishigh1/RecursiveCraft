@@ -1,3 +1,6 @@
+# 1.3
+* Changed the implementation of Compoundrecipe
+
 # 1.2
 * Fixed an issue with recipes needing more than 15 ingredients
 * Fixed an issue with OnCraft not being called
