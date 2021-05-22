@@ -28,7 +28,7 @@ namespace RecursiveCraft
 				for (int j = 0; j < maxRequirements; j++) requiredItem[j] = new Item();
 			}
 
-			createItem = createItem = OverridenRecipe.createItem;
+			createItem = OverridenRecipe.createItem;
 			RecipeInfo = recipeInfo;
 
 			List<KeyValuePair<int, int>> keyValuePairs = RecipeInfo.UsedItems.ToList();
