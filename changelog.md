@@ -1,3 +1,7 @@
+# 1.4
+* Refactoring of the code again
+* Fixed a bug using more resources than needed when using two intermediate recipes for one ingredient
+
 # 1.3
 * Changed the implementation of Compoundrecipe
 

@@ -20,17 +20,24 @@ namespace RecursiveCraft
 		{
 			RecipeId = recipeId;
 			OverridenRecipe = Main.recipe[recipeId];
+			RecipeInfo = recipeInfo;
+			
+			createItem = OverridenRecipe.createItem;
 
 			if (recipeInfo.UsedItems.Count > maxRequirements)
 			{
 				maxRequirements = recipeInfo.UsedItems.Count; //This may be a bit bigger than the needed value
 				requiredItem = new Item[maxRequirements];
+				requiredTile = new int[maxRequirements];
 				for (int j = 0; j < maxRequirements; j++) requiredItem[j] = new Item();
 			}
+			
+			SetRequiredItems();
+			SetRequiredTiles();
+		}
 
-			createItem = OverridenRecipe.createItem;
-			RecipeInfo = recipeInfo;
-
+		public void SetRequiredItems()
+		{
 			List<KeyValuePair<int, int>> keyValuePairs = RecipeInfo.UsedItems.ToList();
 			int i = 0;
 			foreach (KeyValuePair<int, int> keyValuePair in keyValuePairs.Where(keyValuePair => keyValuePair.Value > 0))
@@ -41,6 +48,40 @@ namespace RecursiveCraft
 			}
 
 			for (; i < maxRequirements; i++) requiredItem[i].type = ItemID.None;
+		}
+
+		public void SetRequiredTiles()
+		{
+			needWater = false;
+			needLava = false;
+			needHoney = false;
+			needSnowBiome = false;
+			Dictionary<Recipe, int> keyValuePairs = RecipeInfo.RecipeUsed;
+			int i = 0;
+			foreach (Recipe recipe in keyValuePairs.Select(keyValuePair => keyValuePair.Key))
+			{
+				needWater |= recipe.needWater;
+				needLava |= recipe.needLava;
+				needHoney |= recipe.needHoney;
+				needSnowBiome |= recipe.needSnowBiome;
+				
+				foreach (int requiredTile in recipe.requiredTile)
+				{
+					if(requiredTile == -1) break;
+					bool alreadyRequired = false;
+					for (int j = 0; j < i; j++)
+						if (this.requiredTile[j] == requiredTile)
+						{
+							alreadyRequired = true;
+							break;
+						}
+
+					if (!alreadyRequired)
+						this.requiredTile[i++] = requiredTile;
+				}
+			}
+
+			for (; i < maxRequirements; i++) requiredTile[i] = -1;
 		}
 
 		public override int ConsumeItem(int type, int numRequired)
