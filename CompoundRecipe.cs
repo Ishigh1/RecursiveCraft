@@ -24,14 +24,15 @@ namespace RecursiveCraft
 			
 			createItem = OverridenRecipe.createItem;
 
-			if (recipeInfo.UsedItems.Count > maxRequirements)
+			if (recipeInfo.UsedItems.Count > requiredItem.Length)
 			{
-				maxRequirements = recipeInfo.UsedItems.Count; //This may be a bit bigger than the needed value
+				if (recipeInfo.UsedItems.Count > maxRequirements)
+					maxRequirements = recipeInfo.UsedItems.Count; //This may be a bit bigger than the needed value
 				requiredItem = new Item[maxRequirements];
 				requiredTile = new int[maxRequirements];
 				for (int j = 0; j < maxRequirements; j++) requiredItem[j] = new Item();
 			}
-			
+
 			SetRequiredItems();
 			SetRequiredTiles();
 		}
@@ -47,7 +48,7 @@ namespace RecursiveCraft
 				++i;
 			}
 
-			for (; i < maxRequirements; i++) requiredItem[i].type = ItemID.None;
+			for (; i < requiredItem.Length; i++) requiredItem[i].type = ItemID.None;
 		}
 
 		public void SetRequiredTiles()
@@ -81,7 +82,7 @@ namespace RecursiveCraft
 				}
 			}
 
-			for (; i < maxRequirements; i++) requiredTile[i] = -1;
+			for (; i < requiredTile.Length; i++) requiredTile[i] = -1;
 		}
 
 		public override int ConsumeItem(int type, int numRequired)
