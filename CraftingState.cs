@@ -6,10 +6,10 @@ namespace RecursiveCraft
 {
 	public class CraftingState
 	{
-		public Dictionary<int, int> Inventory;
-		public Dictionary<int, int> TrueInventory;
-		public Dictionary<Recipe, int> RecipeUsed;
 		public int Depth;
+		public Dictionary<int, int> Inventory;
+		public Dictionary<Recipe, int> RecipeUsed;
+		public Dictionary<int, int> TrueInventory;
 
 		public CraftingState(Dictionary<int, int> inventory)
 		{

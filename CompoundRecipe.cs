@@ -1,16 +1,16 @@
 using System.Collections.Generic;
 using System.Linq;
 using Terraria;
-using Terraria.ModLoader;
 using Terraria.ID;
+using Terraria.ModLoader;
 
 namespace RecursiveCraft
 {
 	public class CompoundRecipe : ModRecipe
 	{
-		public RecipeInfo RecipeInfo;
 		public Recipe OverridenRecipe;
 		public int RecipeId;
+		public RecipeInfo RecipeInfo;
 
 		public CompoundRecipe(Mod mod) : base(mod)
 		{
@@ -21,7 +21,7 @@ namespace RecursiveCraft
 			RecipeId = recipeId;
 			OverridenRecipe = Main.recipe[recipeId];
 			RecipeInfo = recipeInfo;
-			
+
 			createItem = OverridenRecipe.createItem;
 
 			if (recipeInfo.UsedItems.Count > requiredItem.Length)
@@ -65,10 +65,10 @@ namespace RecursiveCraft
 				needLava |= recipe.needLava;
 				needHoney |= recipe.needHoney;
 				needSnowBiome |= recipe.needSnowBiome;
-				
+
 				foreach (int requiredTile in recipe.requiredTile)
 				{
-					if(requiredTile == -1) break;
+					if (requiredTile == -1) break;
 					bool alreadyRequired = false;
 					for (int j = 0; j < i; j++)
 						if (this.requiredTile[j] == requiredTile)

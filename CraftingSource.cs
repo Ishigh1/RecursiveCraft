@@ -4,12 +4,12 @@ namespace RecursiveCraft
 {
 	public class CraftingSource
 	{
-		public bool[] AdjTile;
-		public bool AdjWater;
 		public bool AdjHoney;
 		public bool AdjLava;
-		public bool ZoneSnow;
+		public bool[] AdjTile;
+		public bool AdjWater;
 		public bool AlchemyTable;
+		public bool ZoneSnow;
 
 		public static CraftingSource PlayerAsCraftingSource()
 		{

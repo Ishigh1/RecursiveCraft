@@ -19,8 +19,9 @@ namespace RecursiveCraft
 		public static CompoundRecipe CompoundRecipe;
 
 		public static int DepthSearch;
-		public static bool InventoryWasOpen;
+		public static bool InventoryIsOpen;
 		public static ModHotKey[] Hotkeys;
+		public static List<Func<bool>> InventoryChecks;
 
 		public override void Load()
 		{
@@ -37,6 +38,10 @@ namespace RecursiveCraft
 				RegisterHotKey("-1 crafting depth", "PageDown"),
 				RegisterHotKey("No crafting depth", "End")
 			};
+			InventoryChecks = new List<Func<bool>>
+			{
+				() => Main.playerInventory
+			};
 		}
 
 		public override void Unload()
@@ -51,12 +56,14 @@ namespace RecursiveCraft
 			if (CompoundRecipe.OverridenRecipe != null)
 				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
 			CompoundRecipe = null;
+
+			InventoryChecks = null;
 		}
 
 		public override void PostAddRecipes()
 		{
 			CompoundRecipe = new CompoundRecipe(this);
-			
+
 			foreach (Recipe recipe in Main.recipe)
 			{
 				int type = recipe.createItem.type;
@@ -70,15 +77,21 @@ namespace RecursiveCraft
 			}
 		}
 
+		public static bool UpdateInventoryState()
+		{
+			bool wasOpen = InventoryIsOpen;
+			InventoryIsOpen = false;
+			foreach (Func<bool> inventoryCheck in InventoryChecks) InventoryIsOpen |= inventoryCheck.Invoke();
+
+			return InventoryIsOpen == wasOpen;
+		}
+
 		public void ApplyKey(OnMain.orig_Update orig, Main self, GameTime gameTime)
 		{
-			if (InventoryWasOpen != Main.playerInventory)
-			{
-				InventoryWasOpen = !InventoryWasOpen;
+			if (UpdateInventoryState())
 				DepthSearch = ((RecursiveSettings) GetConfig("RecursiveSettings")).DefaultDepth;
-			}
 
-			if (InventoryWasOpen)
+			if (InventoryIsOpen)
 			{
 				int oldDepth = DepthSearch;
 				if (Hotkeys[0].JustPressed)
@@ -115,7 +128,8 @@ namespace RecursiveCraft
 
 		public static void EditFocusRecipe(OnMain.orig_DrawInventory orig, Main self)
 		{
-			if (CompoundRecipe.OverridenRecipe != null) Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
+			if (CompoundRecipe.OverridenRecipe != null)
+				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
 			int i = Main.availableRecipe[Main.focusRecipe];
 			Recipe recipe = Main.recipe[i];
 			if (RecipeCache.TryGetValue(recipe, out RecipeInfo recipeInfo))
@@ -175,7 +189,5 @@ namespace RecursiveCraft
 				}
 			}
 		}
-
-		
 	}
 }

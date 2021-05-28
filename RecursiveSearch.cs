@@ -24,8 +24,14 @@ namespace RecursiveCraft
 		public static RecipeInfo FindIngredientsForRecipe(Dictionary<int, int> inventory,
 			CraftingSource craftingSource, Recipe recipe)
 		{
+			return FindIngredientsForRecipe(inventory, craftingSource, recipe, RecursiveCraft.DepthSearch);
+		}
+
+		public static RecipeInfo FindIngredientsForRecipe(Dictionary<int, int> inventory,
+			CraftingSource craftingSource, Recipe recipe, int maxDepth)
+		{
 			RecursiveSearch recursiveSearch =
-				new RecursiveSearch(inventory, craftingSource, RecursiveCraft.DepthSearch);
+				new RecursiveSearch(inventory, craftingSource, maxDepth);
 			if (!recursiveSearch.IsCraftable(recipe)) return null;
 
 			Dictionary<int, int> usedItems = new Dictionary<int, int>();
@@ -102,7 +108,7 @@ namespace RecursiveCraft
 				if (ingredientsNeeded > 0)
 				{
 					timeCraft -= (ingredientsNeeded + ingredient.stack - 1) / ingredient.stack;
-					if(trueTimeCraft != 0)
+					if (trueTimeCraft != 0)
 						trueTimeCraft -= (ingredientsNeeded + ingredient.stack - 1) / ingredient.stack;
 					break;
 				}
