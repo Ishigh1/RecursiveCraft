@@ -18,7 +18,7 @@ namespace RecursiveCraft
 		public static Dictionary<Recipe, RecipeInfo> RecipeCache;
 		public static CompoundRecipe CompoundRecipe;
 
-		public static int DepthSearch;
+		public static int DepthSearch = -1;
 		public static bool InventoryWasOpen;
 		public static ModHotKey[] Hotkeys;
 
