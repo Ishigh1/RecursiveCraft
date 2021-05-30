@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -10,34 +9,36 @@ namespace RecursiveCraft
 {
 	public class RecursiveSearch
 	{
+		public Dictionary<Recipe, bool> PossibleCraftCache;
+		public Dictionary<int, int> Inventory;
 		public CraftingSource CraftingSource;
 		public CraftingState CraftingState;
 		public int MaxDepth;
 
 		public RecursiveSearch(Dictionary<int, int> inventory, CraftingSource craftingSource, int maxDepth)
 		{
-			CraftingState = new CraftingState(inventory);
+			PossibleCraftCache = new Dictionary<Recipe, bool>();
+			Inventory = inventory;
 			CraftingSource = craftingSource;
 			MaxDepth = maxDepth;
 		}
 
-		public static RecipeInfo FindIngredientsForRecipe(Dictionary<int, int> inventory,
-			CraftingSource craftingSource, Recipe recipe)
+		public RecursiveSearch(Dictionary<int, int> inventory, CraftingSource craftingSource) : this(inventory,
+			craftingSource, RecursiveCraft.DepthSearch)
 		{
-			return FindIngredientsForRecipe(inventory, craftingSource, recipe, RecursiveCraft.DepthSearch);
 		}
 
-		public static RecipeInfo FindIngredientsForRecipe(Dictionary<int, int> inventory,
-			CraftingSource craftingSource, Recipe recipe, int maxDepth)
+		public RecipeInfo FindIngredientsForRecipe(Recipe recipe)
 		{
-			RecursiveSearch recursiveSearch =
-				new RecursiveSearch(inventory, craftingSource, maxDepth);
-			if (!recursiveSearch.IsCraftable(recipe)) return null;
+			CraftingState = new CraftingState(Inventory);
+			bool craftable = IsCraftable(recipe);
+			PossibleCraftCache[recipe] = craftable;
+			if (!craftable) return null;
 
 			Dictionary<int, int> usedItems = new Dictionary<int, int>();
-			foreach (KeyValuePair<int, int> keyValuePair in recursiveSearch.CraftingState.Inventory)
+			foreach (KeyValuePair<int, int> keyValuePair in CraftingState.Inventory)
 			{
-				if (!inventory.TryGetValue(keyValuePair.Key, out int amount))
+				if (!Inventory.TryGetValue(keyValuePair.Key, out int amount))
 					amount = 0;
 				amount -= keyValuePair.Value;
 				if (amount != 0)
@@ -45,16 +46,16 @@ namespace RecursiveCraft
 			}
 
 			Dictionary<int, int> trueUsedItems = new Dictionary<int, int>();
-			foreach (KeyValuePair<int, int> keyValuePair in recursiveSearch.CraftingState.TrueInventory)
+			foreach (KeyValuePair<int, int> keyValuePair in CraftingState.TrueInventory)
 			{
-				if (!inventory.TryGetValue(keyValuePair.Key, out int amount))
+				if (!Inventory.TryGetValue(keyValuePair.Key, out int amount))
 					amount = 0;
 				amount -= keyValuePair.Value;
 				if (amount != 0)
 					trueUsedItems.Add(keyValuePair.Key, amount);
 			}
 
-			return new RecipeInfo(usedItems, trueUsedItems, recursiveSearch.CraftingState.RecipeUsed);
+			return new RecipeInfo(usedItems, trueUsedItems, CraftingState.RecipeUsed);
 		}
 
 		public bool IsCraftable(Recipe recipe)
@@ -70,15 +71,13 @@ namespace RecursiveCraft
 
 			List<int> newForbiddenItems = forbiddenItems.ToList();
 
-			MethodInfo getAcceptedGroups =
-				typeof(RecipeFinder).GetMethod("GetAcceptedGroups", BindingFlags.NonPublic | BindingFlags.Static);
-			List<int> recipeAcceptedGroups = (List<int>) getAcceptedGroups.Invoke(null, new object[] {recipe});
+			List<int> recipeAcceptedGroups =
+				(List<int>) RecursiveCraft.GetAcceptedGroups.Invoke(null, new object[] {recipe});
 
 			int timeCraft = (amount + recipe.createItem.stack - 1) / recipe.createItem.stack;
 			int trueTimeCraft = (trueAmount + recipe.createItem.stack - 1) / recipe.createItem.stack;
-			for (int numIngredient = 0; numIngredient < Recipe.maxRequirements; numIngredient++)
+			foreach (Item ingredient in recipe.requiredItem)
 			{
-				Item ingredient = recipe.requiredItem[numIngredient];
 				if (ingredient.type == ItemID.None) break;
 
 				int ingredientsNeeded = timeCraft * ingredient.stack;
@@ -219,6 +218,8 @@ namespace RecursiveCraft
 
 		public bool IsAvailable(Recipe recipe)
 		{
+			if (PossibleCraftCache.TryGetValue(recipe, out bool craftable) && !craftable)
+				return false;
 			if (!RecipeHooks.RecipeAvailable(recipe))
 				return false;
 			for (int craftingStation = 0;
