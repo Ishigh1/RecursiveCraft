@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Terraria;
@@ -96,12 +97,30 @@ namespace RecursiveCraft
 			foreach (KeyValuePair<int, int> keyValuePair in keyValuePairs.Where(keyValuePair => keyValuePair.Value < 0))
 				Main.LocalPlayer.QuickSpawnItem(keyValuePair.Key, -keyValuePair.Value);
 
-			foreach (KeyValuePair<Recipe, int> keyValuePair in RecipeInfo.RecipeUsed)
-				for (int i = 0; i < keyValuePair.Value; i++)
+			List<KeyValuePair<Recipe, int>> recipes = RecipeInfo.RecipeUsed.ToList();
+			for (var i = 0; i < recipes.Count; i++)
+			{
+				Recipe recipe = recipes[i].Key;
+				int timesCrafted = recipes[i].Value;
+				
+				Item targetItem;
+				if (i == 0)
+					targetItem = item;
+				else
 				{
-					RecipeHooks.OnCraft(Main.mouseItem, keyValuePair.Key);
-					ItemLoader.OnCraft(Main.mouseItem, keyValuePair.Key);
+					targetItem = new Item();
+					targetItem.SetDefaults(recipe.createItem.type);
+					targetItem.stack = recipe.createItem.stack;
 				}
+
+				for (int j = 0; j < timesCrafted; j++)
+				{
+					RecipeHooks.OnCraft(targetItem, recipe);
+					ItemLoader.OnCraft(targetItem, recipe);
+
+					//This still does take into account any OnCraft editing intermediate recipe result
+				}
+			}
 		}
 	}
 }

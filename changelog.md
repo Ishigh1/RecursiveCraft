@@ -1,3 +1,6 @@
+# 1.6 
+* Fixed an issue happening with mods doing stuff when a recipe is used.
+
 # 1.5
 * Performances increased
 
