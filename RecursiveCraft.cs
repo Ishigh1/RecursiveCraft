@@ -63,7 +63,7 @@ namespace RecursiveCraft
 
 			Hotkeys = null;
 
-			if (CompoundRecipe.OverridenRecipe != null)
+			if (CompoundRecipe?.OverridenRecipe != null)
 				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
 			CompoundRecipe = null;
 
