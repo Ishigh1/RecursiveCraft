@@ -79,14 +79,12 @@ namespace RecursiveCraft
 
 			Dictionary<int, int> ingredientsNeeded = new Dictionary<int, int>();
 			Dictionary<Recipe, int> correspondingId = new Dictionary<Recipe, int>();
+			float[] costs = new float[Recipe.maxRecipes];
 
-			for (int index = 0; index < Recipe.maxRecipes; index++)
+			foreach (Recipe recipe in Main.recipe)
 			{
-				Recipe recipe = Main.recipe[index];
 				int type = recipe.createItem.type;
 				if (type == ItemID.None) break;
-
-				correspondingId[recipe] = index;
 
 				if (!RecipeByResult.TryGetValue(type, out List<Recipe> list))
 				{
@@ -97,22 +95,41 @@ namespace RecursiveCraft
 				}
 
 				list.Add(recipe);
+			}
 
+			for (int index = 0; index < Recipe.maxRecipes; index++)
+			{
+				Recipe recipe = Main.recipe[index];
+				correspondingId[recipe] = index;
+
+				float cost = 1;
 				foreach (Item ingredient in recipe.requiredItem)
 				{
 					if (ingredient.type == ItemID.None) break;
 					List<int> recipeAcceptedGroups = (List<int>) GetAcceptedGroups.Invoke(null, new object[] {recipe});
 					foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipeAcceptedGroups,
 						ingredient))
+					{
+						if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe> list))
+							cost += list.Count * ingredient.stack;
+
 						if (ingredientsNeeded.TryGetValue(possibleIngredient, out int timesUsed))
 							ingredientsNeeded[possibleIngredient] = timesUsed + 1;
 						else
 							ingredientsNeeded[possibleIngredient] = 1;
+					}
 				}
+
+				costs[index] = cost / recipe.createItem.stack;
 			}
+
+			foreach (List<Recipe> recipes in RecipeByResult.Select(keyValuePair => keyValuePair.Value))
+				recipes.Sort((recipe1, recipe2) =>
+					(int) (costs[correspondingId[recipe2]] - costs[correspondingId[recipe1]]));
 
 			List<KeyValuePair<int, int>> sortedIngredientList = ingredientsNeeded.ToList();
 			sortedIngredientList.Sort((pair, valuePair) => valuePair.Value - pair.Value);
+
 			SortedRecipeList = new List<int>();
 			foreach (KeyValuePair<int, int> keyValuePair in sortedIngredientList)
 				if (RecipeByResult.TryGetValue(keyValuePair.Key, out List<Recipe> recipes))

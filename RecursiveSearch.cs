@@ -9,11 +9,11 @@ namespace RecursiveCraft
 {
 	public class RecursiveSearch
 	{
-		public Dictionary<Recipe, bool> PossibleCraftCache;
-		public Dictionary<int, int> Inventory;
 		public CraftingSource CraftingSource;
 		public CraftingState CraftingState;
+		public Dictionary<int, int> Inventory;
 		public int MaxDepth;
+		public Dictionary<Recipe, bool> PossibleCraftCache;
 
 		public RecursiveSearch(Dictionary<int, int> inventory, CraftingSource craftingSource, int maxDepth)
 		{
@@ -28,13 +28,18 @@ namespace RecursiveCraft
 		{
 		}
 
-		public RecipeInfo FindIngredientsForRecipe(Recipe recipe)
+		public RecipeInfo FindIngredientsForRecipe(Recipe recipe, int timeCraft = 1)
 		{
 			CraftingState = new CraftingState(Inventory);
-			bool craftable = IsCraftable(recipe);
-			PossibleCraftCache[recipe] = craftable;
-			if (!craftable) return null;
+			bool craftable = CraftableAmount(recipe, recipe.createItem.stack * timeCraft,
+				recipe.createItem.stack * timeCraft, new List<int>()).Item1 > 0;
+			if (timeCraft == 1)
+				PossibleCraftCache[recipe] = craftable;
+			return !craftable ? null : CreateRecipeInfo();
+		}
 
+		public RecipeInfo CreateRecipeInfo()
+		{
 			Dictionary<int, int> usedItems = new Dictionary<int, int>();
 			foreach (KeyValuePair<int, int> keyValuePair in CraftingState.Inventory)
 			{
@@ -56,11 +61,6 @@ namespace RecursiveCraft
 			}
 
 			return new RecipeInfo(usedItems, trueUsedItems, CraftingState.RecipeUsed);
-		}
-
-		public bool IsCraftable(Recipe recipe)
-		{
-			return CraftableAmount(recipe, recipe.createItem.stack, recipe.createItem.stack, new List<int>()).Item1 > 0;
 		}
 
 		public (int, int) CraftableAmount(Recipe recipe, int amount, int trueAmount, List<int> forbiddenItems)
@@ -96,7 +96,7 @@ namespace RecursiveCraft
 						newForbiddenItems.Add(recipe.createItem.type);
 					foreach (int validItem in ingredientList)
 					{
-						useIngredientFromRecipe(newForbiddenItems,
+						UseIngredientFromRecipe(newForbiddenItems,
 							validItem, ref ingredientsNeeded, ref trueIngredientsNeeded);
 
 						if (ingredientsNeeded <= 0)
@@ -131,7 +131,7 @@ namespace RecursiveCraft
 			}
 		}
 
-		public void useIngredientFromRecipe(List<int> newForbiddenItems,
+		public void UseIngredientFromRecipe(List<int> newForbiddenItems,
 			int validItem, ref int ingredientsNeeded, ref int trueIngredientsNeeded)
 		{
 			if (!newForbiddenItems.Contains(validItem) &&
