@@ -222,11 +222,8 @@ namespace RecursiveCraft
 				return false;
 			if (!RecipeHooks.RecipeAvailable(recipe))
 				return false;
-			for (int craftingStation = 0;
-				craftingStation < Recipe.maxRequirements && recipe.requiredTile[craftingStation] != -1;
-				craftingStation++)
-				if (!CraftingSource.AdjTile[recipe.requiredTile[craftingStation]])
-					return false;
+			if (recipe.requiredTile.TakeWhile(tile => tile != -1).Any(tile => !CraftingSource.AdjTile[tile]))
+				return false;
 
 			if (recipe.needWater && !CraftingSource.AdjWater &&
 			    !CraftingSource.AdjTile[172])
