@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Microsoft.Xna.Framework;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
@@ -19,11 +18,10 @@ namespace RecursiveCraft
 		public static Dictionary<Recipe, RecipeInfo> RecipeInfoCache;
 		public static List<int> SortedRecipeList;
 		public static CompoundRecipe CompoundRecipe;
-		public static MethodInfo GetAcceptedGroups;
 
 		public static int DepthSearch;
 		public static bool InventoryIsOpen;
-		public static ModHotKey[] Hotkeys;
+		public static ModKeybind[] Hotkeys;
 		public static List<Func<bool>> InventoryChecks;
 
 		public override void Load()
@@ -36,19 +34,16 @@ namespace RecursiveCraft
 
 			Hotkeys = new[]
 			{
-				RegisterHotKey("Infinite crafting depth", "Home"),
-				RegisterHotKey("+1 crafting depth", "PageUp"),
-				RegisterHotKey("-1 crafting depth", "PageDown"),
-				RegisterHotKey("No crafting depth", "End")
+				KeybindLoader.RegisterKeybind(this, "Infinite crafting depth", "Home"),
+				KeybindLoader.RegisterKeybind(this, "+1 crafting depth", "PageUp"),
+				KeybindLoader.RegisterKeybind(this, "-1 crafting depth", "PageDown"),
+				KeybindLoader.RegisterKeybind(this, "No crafting depth", "End")
 			};
 
 			InventoryChecks = new List<Func<bool>>
 			{
 				() => Main.playerInventory
 			};
-
-			GetAcceptedGroups =
-				typeof(RecipeFinder).GetMethod("GetAcceptedGroups", BindingFlags.NonPublic | BindingFlags.Static);
 		}
 
 		public override void Unload()
@@ -68,8 +63,6 @@ namespace RecursiveCraft
 			CompoundRecipe = null;
 
 			InventoryChecks = null;
-
-			GetAcceptedGroups = null;
 		}
 
 		public override void PostAddRecipes()
@@ -77,8 +70,8 @@ namespace RecursiveCraft
 			CompoundRecipe = new CompoundRecipe(this);
 			RecipeByResult = new Dictionary<int, List<Recipe>>();
 
-			Dictionary<int, int> ingredientsNeeded = new Dictionary<int, int>();
-			Dictionary<Recipe, int> correspondingId = new Dictionary<Recipe, int>();
+			Dictionary<int, int> ingredientsNeeded = new();
+			Dictionary<Recipe, int> correspondingId = new();
 			float[] costs = new float[Recipe.maxRecipes];
 
 			foreach (Recipe recipe in Main.recipe)
@@ -106,9 +99,7 @@ namespace RecursiveCraft
 				foreach (Item ingredient in recipe.requiredItem)
 				{
 					if (ingredient.type == ItemID.None) break;
-					List<int> recipeAcceptedGroups = (List<int>) GetAcceptedGroups.Invoke(null, new object[] {recipe});
-					foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipeAcceptedGroups,
-						ingredient))
+					foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipe, ingredient))
 					{
 						if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe> list))
 							cost += list.Count * ingredient.stack;
@@ -195,7 +186,7 @@ namespace RecursiveCraft
 			if (RecipeInfoCache.TryGetValue(recipe, out RecipeInfo recipeInfo))
 			{
 				CompoundRecipe.Apply(i, recipeInfo);
-				Main.recipe[i] = CompoundRecipe;
+				Main.recipe[i] = CompoundRecipe.Compound;
 			}
 			else
 			{
@@ -207,7 +198,7 @@ namespace RecursiveCraft
 
 		public static void ApplyRecursiveSearch(ILContext il)
 		{
-			ILCursor cursor = new ILCursor(il);
+			ILCursor cursor = new(il);
 			if (!cursor.TryGotoNext(MoveType.After,
 				instruction => instruction.OpCode == OpCodes.Blt_S && instruction.Previous.MatchLdcI4(40)))
 				return;
@@ -234,14 +225,14 @@ namespace RecursiveCraft
 		public static void FindRecipes(Dictionary<int, int> inventory)
 		{
 			RecipeInfoCache.Clear();
-			RecursiveSearch recursiveSearch = new RecursiveSearch(inventory, CraftingSource.PlayerAsCraftingSource());
+			RecursiveSearch recursiveSearch = new(inventory);
 
-			SortedSet<int> sortedAvailableRecipes = new SortedSet<int>();
+			SortedSet<int> sortedAvailableRecipes = new();
 			foreach (int n in SortedRecipeList)
 			{
 				Recipe recipe = Main.recipe[n];
-				if (recipe is CompoundRecipe compoundRecipe)
-					recipe = compoundRecipe.OverridenRecipe;
+				if (recipe == CompoundRecipe.Compound)
+					recipe = CompoundRecipe.OverridenRecipe;
 				RecipeInfo recipeInfo = recursiveSearch.FindIngredientsForRecipe(recipe);
 				if (recipeInfo != null)
 				{

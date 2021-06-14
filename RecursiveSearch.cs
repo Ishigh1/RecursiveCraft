@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -9,22 +10,19 @@ namespace RecursiveCraft
 {
 	public class RecursiveSearch
 	{
-		public CraftingSource CraftingSource;
 		public CraftingState CraftingState;
 		public Dictionary<int, int> Inventory;
 		public int MaxDepth;
 		public Dictionary<Recipe, bool> PossibleCraftCache;
 
-		public RecursiveSearch(Dictionary<int, int> inventory, CraftingSource craftingSource, int maxDepth)
+		public RecursiveSearch(Dictionary<int, int> inventory, int maxDepth)
 		{
 			PossibleCraftCache = new Dictionary<Recipe, bool>();
 			Inventory = inventory;
-			CraftingSource = craftingSource;
 			MaxDepth = maxDepth;
 		}
 
-		public RecursiveSearch(Dictionary<int, int> inventory, CraftingSource craftingSource) : this(inventory,
-			craftingSource, RecursiveCraft.DepthSearch)
+		public RecursiveSearch(Dictionary<int, int> inventory) : this(inventory, RecursiveCraft.DepthSearch)
 		{
 		}
 
@@ -40,24 +38,24 @@ namespace RecursiveCraft
 
 		public RecipeInfo CreateRecipeInfo()
 		{
-			Dictionary<int, int> usedItems = new Dictionary<int, int>();
-			foreach (KeyValuePair<int, int> keyValuePair in CraftingState.Inventory)
+			Dictionary<int, int> usedItems = new();
+			foreach ((int key, int value) in CraftingState.Inventory)
 			{
-				if (!Inventory.TryGetValue(keyValuePair.Key, out int amount))
+				if (!Inventory.TryGetValue(key, out int amount))
 					amount = 0;
-				amount -= keyValuePair.Value;
+				amount -= value;
 				if (amount != 0)
-					usedItems.Add(keyValuePair.Key, amount);
+					usedItems.Add(key, amount);
 			}
 
-			Dictionary<int, int> trueUsedItems = new Dictionary<int, int>();
-			foreach (KeyValuePair<int, int> keyValuePair in CraftingState.TrueInventory)
+			Dictionary<int, int> trueUsedItems = new();
+			foreach ((int key, int value) in CraftingState.TrueInventory)
 			{
-				if (!Inventory.TryGetValue(keyValuePair.Key, out int amount))
+				if (!Inventory.TryGetValue(key, out int amount))
 					amount = 0;
-				amount -= keyValuePair.Value;
+				amount -= value;
 				if (amount != 0)
-					trueUsedItems.Add(keyValuePair.Key, amount);
+					trueUsedItems.Add(key, amount);
 			}
 
 			return new RecipeInfo(usedItems, trueUsedItems, CraftingState.RecipeUsed);
@@ -71,9 +69,6 @@ namespace RecursiveCraft
 
 			List<int> newForbiddenItems = forbiddenItems.ToList();
 
-			List<int> recipeAcceptedGroups =
-				(List<int>) RecursiveCraft.GetAcceptedGroups.Invoke(null, new object[] {recipe});
-
 			int timeCraft = (amount + recipe.createItem.stack - 1) / recipe.createItem.stack;
 			int trueTimeCraft = (trueAmount + recipe.createItem.stack - 1) / recipe.createItem.stack;
 			foreach (Item ingredient in recipe.requiredItem)
@@ -84,7 +79,7 @@ namespace RecursiveCraft
 				int trueIngredientsNeeded =
 					trueTimeCraft * ingredient.stack - DiscountRecipe(recipe, trueTimeCraft, ingredient);
 
-				List<int> ingredientList = ListAllIngredient(recipeAcceptedGroups, ingredient);
+				List<int> ingredientList = ListAllIngredient(recipe, ingredient);
 
 				ingredientList.RemoveAll(forbiddenItems.Contains);
 
@@ -146,21 +141,28 @@ namespace RecursiveCraft
 				}
 		}
 
-		public int DiscountRecipe(Recipe recipe, int trueTimeCraft, Item ingredient)
+		public static int DiscountRecipe(Recipe recipe, int trueTimeCraft, Item ingredient)
 		{
+			PropertyInfo propertyInfo = typeof(Recipe).GetProperty("ConsumeItemHooks", BindingFlags.Instance | BindingFlags.NonPublic);
+			Recipe.ConsumeItemCallback consumeItemHooks =
+				propertyInfo.GetMethod.Invoke(recipe, null) as Recipe.ConsumeItemCallback;
 			int discount = 0;
-			if (recipe.alchemy && CraftingSource.AlchemyTable)
+			if (consumeItemHooks != null)
 				for (int i = 0; i < trueTimeCraft; i++)
-					if (Main.rand.Next(3) == 0)
-						discount += ingredient.stack;
+				{
+					int consumedItems = ingredient.stack;
+					consumeItemHooks.Invoke(recipe, ingredient.type, ref consumedItems);
+					discount += ingredient.stack - consumedItems;
+				}
+
 			return discount;
 		}
 
-		public static List<int> ListAllIngredient(IEnumerable<int> recipeAcceptedGroups, Item ingredient)
+		public static List<int> ListAllIngredient(Recipe recipe, Item ingredient)
 		{
-			List<int> ingredientList = new List<int>();
+			List<int> ingredientList = new();
 
-			foreach (int validItem in recipeAcceptedGroups
+			foreach (int validItem in recipe.acceptedGroups
 				.Select(recipeAcceptedGroup => RecipeGroup.recipeGroups[recipeAcceptedGroup])
 				.Where(recipeGroup => recipeGroup.ContainsItem(ingredient.netID)).SelectMany(recipeGroup =>
 					recipeGroup.ValidItems.Where(validItem => !ingredientList.Contains(validItem))))
@@ -220,19 +222,9 @@ namespace RecursiveCraft
 		{
 			if (PossibleCraftCache.TryGetValue(recipe, out bool craftable) && !craftable)
 				return false;
-			if (!RecipeHooks.RecipeAvailable(recipe))
+			if (!RecipeLoader.RecipeAvailable(recipe))
 				return false;
-			if (recipe.requiredTile.TakeWhile(tile => tile != -1).Any(tile => !CraftingSource.AdjTile[tile]))
-				return false;
-
-			if (recipe.needWater && !CraftingSource.AdjWater &&
-			    !CraftingSource.AdjTile[172])
-				return false;
-			if (recipe.needHoney && !CraftingSource.AdjHoney)
-				return false;
-			if (recipe.needLava && !CraftingSource.AdjLava)
-				return false;
-			if (recipe.needSnowBiome && !CraftingSource.ZoneSnow)
+			if (recipe.requiredTile.Any(tile => !Main.LocalPlayer.adjTile[tile]))
 				return false;
 
 			return true;

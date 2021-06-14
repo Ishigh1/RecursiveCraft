@@ -1,19 +1,22 @@
 using System.Collections.Generic;
 using System.Linq;
 using Terraria;
-using Terraria.ID;
 using Terraria.ModLoader;
 
 namespace RecursiveCraft
 {
-	public class CompoundRecipe : ModRecipe
+	public class CompoundRecipe
 	{
+		public Recipe Compound;
 		public Recipe OverridenRecipe;
 		public int RecipeId;
 		public RecipeInfo RecipeInfo;
 
-		public CompoundRecipe(Mod mod) : base(mod)
+		public CompoundRecipe(Mod mod)
 		{
+			Compound = mod.CreateRecipe(0);
+			Compound.AddConsumeItemCallback(ConsumeItem);
+			Compound.AddOnCraftCallback(OnCraft);
 		}
 
 		public void Apply(int recipeId, RecipeInfo recipeInfo)
@@ -21,77 +24,32 @@ namespace RecursiveCraft
 			RecipeId = recipeId;
 			OverridenRecipe = Main.recipe[recipeId];
 			RecipeInfo = recipeInfo;
-			
-			createItem.SetDefaults(OverridenRecipe.createItem.type);
-			createItem.stack = OverridenRecipe.createItem.stack * recipeInfo.RecipeUsed[OverridenRecipe];
 
-			if (recipeInfo.UsedItems.Count > requiredItem.Length)
+			Compound.requiredItem.Clear();
+			Compound.Conditions.Clear();
+			Compound.requiredTile.Clear();
+			Compound.ReplaceResult(OverridenRecipe.createItem.type,
+				OverridenRecipe.createItem.stack * recipeInfo.RecipeUsed[OverridenRecipe]);
+
+			List<KeyValuePair<int, int>> usedItems = RecipeInfo.UsedItems.ToList();
+			foreach ((int key, int value) in usedItems.Where(keyValuePair => keyValuePair.Value > 0))
+				Compound.AddIngredient(key, value);
+
+			Dictionary<Recipe, int> recipes = RecipeInfo.RecipeUsed;
+			foreach (Recipe recipe in recipes.Select(keyValuePair => keyValuePair.Key))
 			{
-				if (recipeInfo.UsedItems.Count > maxRequirements)
-					maxRequirements = recipeInfo.UsedItems.Count; //This may be a bit bigger than the needed value
-				requiredItem = new Item[maxRequirements];
-				requiredTile = new int[maxRequirements];
-				for (int j = 0; j < maxRequirements; j++) requiredItem[j] = new Item();
+				Compound.AddCondition(recipe.Conditions);
+				foreach (int requiredTile in recipe.requiredTile) Compound.AddTile(requiredTile);
 			}
-
-			SetRequiredItems();
-			SetRequiredTiles();
 		}
 
-		public void SetRequiredItems()
+		public void ConsumeItem(Recipe recipe, int type, ref int amount)
 		{
-			List<KeyValuePair<int, int>> keyValuePairs = RecipeInfo.UsedItems.ToList();
-			int i = 0;
-			foreach (KeyValuePair<int, int> keyValuePair in keyValuePairs.Where(keyValuePair => keyValuePair.Value > 0))
-			{
-				requiredItem[i].SetDefaults(keyValuePair.Key);
-				requiredItem[i].stack = keyValuePair.Value;
-				++i;
-			}
-
-			for (; i < requiredItem.Length; i++) requiredItem[i].type = ItemID.None;
+			if (!RecipeInfo.TrueUsedItems.TryGetValue(type, out amount))
+				amount = 0;
 		}
 
-		public void SetRequiredTiles()
-		{
-			needWater = false;
-			needLava = false;
-			needHoney = false;
-			needSnowBiome = false;
-			Dictionary<Recipe, int> keyValuePairs = RecipeInfo.RecipeUsed;
-			int i = 0;
-			foreach (Recipe recipe in keyValuePairs.Select(keyValuePair => keyValuePair.Key))
-			{
-				needWater |= recipe.needWater;
-				needLava |= recipe.needLava;
-				needHoney |= recipe.needHoney;
-				needSnowBiome |= recipe.needSnowBiome;
-
-				foreach (int requiredTile in recipe.requiredTile)
-				{
-					if (requiredTile == -1) break;
-					bool alreadyRequired = false;
-					for (int j = 0; j < i; j++)
-						if (this.requiredTile[j] == requiredTile)
-						{
-							alreadyRequired = true;
-							break;
-						}
-
-					if (!alreadyRequired)
-						this.requiredTile[i++] = requiredTile;
-				}
-			}
-
-			for (; i < requiredTile.Length; i++) requiredTile[i] = -1;
-		}
-
-		public override int ConsumeItem(int type, int numRequired)
-		{
-			return RecipeInfo.TrueUsedItems.TryGetValue(type, out numRequired) ? numRequired : 0;
-		}
-
-		public override void OnCraft(Item item)
+		public void OnCraft(Recipe _, Item item)
 		{
 			List<KeyValuePair<int, int>> keyValuePairs = RecipeInfo.TrueUsedItems.ToList();
 			foreach (KeyValuePair<int, int> keyValuePair in keyValuePairs.Where(keyValuePair => keyValuePair.Value < 0))
@@ -116,12 +74,9 @@ namespace RecursiveCraft
 				}
 
 				for (int j = 0; j < timesCrafted; j++)
-				{
-					RecipeHooks.OnCraft(targetItem, recipe);
-					ItemLoader.OnCraft(targetItem, recipe);
+					RecipeLoader.OnCraft(targetItem, recipe);
 
-					//This still doesn't take into account any OnCraft editing intermediate recipe result
-				}
+				//This still doesn't take into account any OnCraft editing intermediate recipe result
 			}
 		}
 	}
