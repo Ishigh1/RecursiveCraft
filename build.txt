@@ -1,4 +1,5 @@
 displayName = Recursive Craft
 author = Gaelyte
 version = 2.0
+//dllReferences = Google.OrTools, Google.Protobuf
 homepage = https://github.com/Ishigh1/RecursiveCraft
