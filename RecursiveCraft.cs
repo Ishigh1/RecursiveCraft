@@ -170,47 +170,24 @@ namespace RecursiveCraft
 			 */
 
 			if (!cursor.TryGotoNext(MoveType.After,
-				instruction => instruction.OpCode == OpCodes.Blt_S && instruction.Previous.MatchLdcI4(40)))
+				instruction => instruction.OpCode == OpCodes.Brtrue && instruction.Previous.MatchLdloc(30)))
 				throw new Exception("The first hook on ApplyRecursiveSearch wasn't found");
+			while (cursor.Next.MatchNop()) cursor.GotoNext();
 			ILLabel label = cursor.DefineLabel();
 			IEnumerable<ILLabel> incomingLabels = cursor.IncomingLabels.ToList();
 			foreach (ILLabel cursorIncomingLabel in incomingLabels) cursor.MarkLabel(cursorIncomingLabel);
 
-			cursor.Emit(OpCodes.Ldloc, 6);
+			cursor.Emit(OpCodes.Ldloc, 12);//Inventory
 			cursor.Emit(OpCodes.Call, typeof(RecursiveCraft).GetMethod("FindRecipes"));
 			cursor.Emit(OpCodes.Br_S, label);
 
-			// Go before 'for (int num7 = 0; num7 < Main.numAvailableRecipes; num7++)'
+			// Go before 'for (int num6 = 0; num6 < Main.numAvailableRecipes; num6++)'
 			if (!cursor.TryGotoNext(MoveType.Before,
 				instruction => instruction.OpCode == OpCodes.Ldc_I4_0 &&
-				               instruction.Previous.OpCode == OpCodes.Brtrue))
+				               (instruction.Previous.OpCode == OpCodes.Brtrue || instruction.Previous.MatchNop() && instruction.Previous.Previous.OpCode == OpCodes.Brtrue)))
 				throw new Exception("The second hook on ApplyRecursiveSearch wasn't found");
 
 			cursor.MarkLabel(label);
-
-			using (StreamWriter file =
-				new StreamWriter(@"D:\debug.txt", true))
-			{
-				foreach (Instruction ilInstr in il.Instrs)
-				{
-					if (ilInstr.Operand is ILLabel ilLabel)
-					{
-						file.WriteLine("IL_" + ilInstr.Offset.ToString("x4") + ": " + ilLabel + " label to " +
-						               "IL_" + ilLabel.Target.Offset.ToString("x4") + " " + ilLabel.Target.Operand);
-					}
-					else
-					{
-						try
-						{
-							file.WriteLine(ilInstr);
-						}
-						catch (Exception)
-						{
-							file.WriteLine("bad code : " + ilInstr.Operand + " " + ilInstr.OpCode);
-						}
-					}
-				}
-			}
 		}
 
 		public static void FindRecipes(Dictionary<int, int> inventory)
@@ -224,7 +201,7 @@ namespace RecursiveCraft
 				Recipe recipe = Main.recipe[i];
 				if (recipe == CompoundRecipe.Compound)
 					recipe = CompoundRecipe.OverridenRecipe;
-				RecipeInfo recipeInfo = recursiveSearch.FindIngredientsForRecipe(recipe);
+				RecipeInfo recipeInfo = recursiveSearch.FindIngredientsForRecipe(recipe, i);
 				if (recipeInfo != null)
 				{
 					if (recipeInfo.RecipeUsed.Count > 1)

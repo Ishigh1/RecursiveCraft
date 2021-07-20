@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Google.OrTools.LinearSolver;
 using Terraria;
@@ -18,8 +20,10 @@ namespace RecursiveCraft
 			TrueUsedItems = UsedItems;
 			foreach ((int key, Variable value) in recursiveSearch.Recipes)
 			{
-				Recipe recipe = Main.recipe[key];
 				int timeCraft = (int) value.SolutionValue();
+				if (timeCraft == 0)
+					continue;
+				Recipe recipe = Main.recipe[key];
 				RecipeUsed.Add(recipe, timeCraft);
 
 				if (!UsedItems.TryAdd(recipe.createItem.type, -recipe.createItem.stack * timeCraft))
@@ -28,6 +32,20 @@ namespace RecursiveCraft
 				foreach (Item item in recipe.requiredItem.Where(item =>
 					!UsedItems.TryAdd(item.type, item.stack * timeCraft)))
 					UsedItems[item.type] += item.stack * timeCraft;
+			}
+
+			if (true)
+
+			{
+				using (StreamWriter file =
+					new StreamWriter(@"D:\debug.txt", true))
+				{
+					file.WriteLine(recursiveSearch.Solver.ExportModelAsLpFormat(false));
+					foreach (var keyValuePair in recursiveSearch.Recipes)
+					{
+						file.WriteLine("Recipe " + keyValuePair.Key + " : " + keyValuePair.Value.SolutionValue());
+					}
+				}
 			}
 		}
 	}

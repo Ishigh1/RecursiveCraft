@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Google.OrTools.LinearSolver;
 using Terraria;
+using Terraria.ID;
 using Terraria.ModLoader;
 
 namespace RecursiveCraft
@@ -39,31 +42,30 @@ namespace RecursiveCraft
 
 		public void PrepareSolver(Dictionary<int, int> inventory)
 		{
-			Solver.SuppressOutput();
-
-			for (int i = 0; i < ItemLoader.ItemCount; i++)
+			for (int itemId = 0; itemId < ItemLoader.ItemCount; itemId++)
 			{
-				if (!inventory.TryGetValue(i, out int quantity))
+				if (!inventory.TryGetValue(itemId, out int quantity))
 					quantity = 0;
-				Ingredients.Add(Solver.MakeConstraint(-quantity, double.PositiveInfinity, i.ToString()));
+				Ingredients.Add(Solver.MakeConstraint(-quantity, double.PositiveInfinity, ItemID.Search.GetName(itemId)));
 			}
 
-			foreach (Recipe recipe in Main.recipe)
+			for (int index = 0; index < Main.recipe.Length; index++)
 			{
-				if (recipe.createItem.type == -1) break;
+				Recipe recipe = Main.recipe[index];
+				if (recipe.createItem.type == ItemID.None) break;
 				if (!IsAvailable(recipe)) continue;
-				Variable variable = Solver.MakeIntVar(0, double.PositiveInfinity, recipe.RecipeIndex.ToString());
-				Recipes.Add(recipe.RecipeIndex, variable);
+				Variable variable = Solver.MakeIntVar(0, double.PositiveInfinity, "recipe_" + index);
+				Recipes.Add(index, variable);
 				Ingredients[recipe.createItem.type].SetCoefficient(variable, recipe.createItem.stack);
 				foreach (Item item in recipe.requiredItem) Ingredients[item.type].SetCoefficient(variable, -item.stack);
 				ToMinimize += variable;
 			}
 		}
 
-		public RecipeInfo FindIngredientsForRecipe(Recipe recipe, int timeCraft = 1)
+		public RecipeInfo FindIngredientsForRecipe(Recipe recipe, int index, int timeCraft = 1)
 		{
 			if (!IsAvailable(recipe)) return null;
-			Variable recipeVariable = Recipes[recipe.RecipeIndex];
+			Variable recipeVariable = Recipes[index];
 			recipeVariable.SetUb(timeCraft);
 			Solver.Maximize(recipeVariable);
 			Solver.Solve();
@@ -74,12 +76,11 @@ namespace RecursiveCraft
 				return null;
 			}
 
-			recipeVariable.SetBounds(timeCraft, timeCraft);
-
+			recipeVariable.SetLb(timeCraft);
 			Solver.Minimize(ToMinimize);
 			Solver.Solve();
 			RecipeInfo recipeInfo = new(this);
-			recipeVariable.SetUb(double.PositiveInfinity);
+			recipeVariable.SetBounds(0, double.PositiveInfinity);
 			return recipeInfo;
 		}
 
