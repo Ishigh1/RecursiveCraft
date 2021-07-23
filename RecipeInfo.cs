@@ -10,42 +10,18 @@ namespace RecursiveCraft
 	public class RecipeInfo
 	{
 		public readonly Dictionary<Recipe, int> RecipeUsed;
-		public readonly Dictionary<int, int> TrueUsedItems;
-		public readonly Dictionary<int, int> UsedItems;
 
-		public RecipeInfo(RecursiveSearch recursiveSearch)
+		public RecipeInfo(Solver solver, IReadOnlyCollection<Recipe> linkedRecipes)
 		{
 			RecipeUsed = new Dictionary<Recipe, int>();
-			UsedItems = new Dictionary<int, int>();
-			TrueUsedItems = UsedItems;
-			foreach ((int key, Variable value) in recursiveSearch.Recipes)
+
+			for (var i = 0; i < linkedRecipes.Count; i++)
 			{
-				int timeCraft = (int) value.SolutionValue();
-				if (timeCraft == 0)
+				int recipeUsage = (int) solver.Variable(i).SolutionValue();
+				if(recipeUsage == 0)
 					continue;
-				Recipe recipe = Main.recipe[key];
-				RecipeUsed.Add(recipe, timeCraft);
-
-				if (!UsedItems.TryAdd(recipe.createItem.type, -recipe.createItem.stack * timeCraft))
-					UsedItems[recipe.createItem.type] -= recipe.createItem.stack * timeCraft;
-
-				foreach (Item item in recipe.requiredItem.Where(item =>
-					!UsedItems.TryAdd(item.type, item.stack * timeCraft)))
-					UsedItems[item.type] += item.stack * timeCraft;
-			}
-
-			if (true)
-
-			{
-				using (StreamWriter file =
-					new StreamWriter(@"D:\debug.txt", true))
-				{
-					file.WriteLine(recursiveSearch.Solver.ExportModelAsLpFormat(false));
-					foreach (var keyValuePair in recursiveSearch.Recipes)
-					{
-						file.WriteLine("Recipe " + keyValuePair.Key + " : " + keyValuePair.Value.SolutionValue());
-					}
-				}
+				Recipe recipe = linkedRecipes.ElementAt(i);
+				RecipeUsed.Add(recipe, recipeUsage);
 			}
 		}
 	}

@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Terraria;
+using Terraria.ID;
 using Terraria.ModLoader;
 
 namespace RecursiveCraft
@@ -9,12 +11,13 @@ namespace RecursiveCraft
 	{
 		public Recipe Compound;
 		public Recipe OverridenRecipe;
-		public int RecipeId;
 		public RecipeInfo RecipeInfo;
+		public int RecipeId;
+		public Dictionary<int, int> TrueUsedItems;
 
 		public CompoundRecipe(Mod mod)
 		{
-			Compound = mod.CreateRecipe(0);
+			Compound = mod.CreateRecipe(ItemID.None);
 			Compound.AddConsumeItemCallback(ConsumeItem);
 			Compound.AddOnCraftCallback(OnCraft);
 		}
@@ -31,28 +34,53 @@ namespace RecursiveCraft
 			Compound.ReplaceResult(OverridenRecipe.createItem.type,
 				OverridenRecipe.createItem.stack * recipeInfo.RecipeUsed[OverridenRecipe]);
 
-			List<KeyValuePair<int, int>> usedItems = RecipeInfo.UsedItems.ToList();
-			foreach ((int key, int value) in usedItems.Where(keyValuePair => keyValuePair.Value > 0))
-				Compound.AddIngredient(key, value);
-
-			Dictionary<Recipe, int> recipes = RecipeInfo.RecipeUsed;
-			foreach (Recipe recipe in recipes.Select(keyValuePair => keyValuePair.Key))
+			TrueUsedItems = new Dictionary<int, int>();
+			foreach ((Recipe recipe, int timeCraft) in recipeInfo.RecipeUsed)
 			{
 				Compound.AddCondition(recipe.Conditions);
-				foreach (int requiredTile in recipe.requiredTile) Compound.AddTile(requiredTile);
+				foreach (int tileId in recipe.requiredTile) Compound.AddTile(tileId);
+				if(recipe == OverridenRecipe)
+					continue;
+				for (int i = 0; i < timeCraft; i++)
+				{
+					AddIngredient(recipe, recipe.createItem.type, -recipe.createItem.stack);
+					foreach (Item item in recipe.requiredItem)
+						AddIngredient(recipe, item.type, item.stack);
+				}
 			}
+
+			Compound.requiredItem.RemoveAll(item => item.stack <= 0);
 		}
 
-		public void ConsumeItem(Recipe recipe, int type, ref int amount)
+		public void AddIngredient(Recipe recipe, int itemId, int stack)
 		{
-			if (!RecipeInfo.TrueUsedItems.TryGetValue(type, out amount))
+			if (Compound.TryGetIngredient(itemId, out Item ingredient))
+				ingredient.stack += stack;
+			else
+				Compound.AddIngredient(itemId, stack);
+
+			if (stack > 0)
+			{
+				PropertyInfo consumeItem = typeof(Recipe).GetProperty("ConsumeItemHooks",
+					BindingFlags.NonPublic | BindingFlags.Instance);
+				Recipe.ConsumeItemCallback consumeItemCallback =
+					(Recipe.ConsumeItemCallback) consumeItem.GetGetMethod().Invoke(recipe, null);
+				consumeItemCallback?.Invoke(recipe, itemId, ref stack);
+			}
+
+			TrueUsedItems.TryGetValue(itemId, out int amount);
+			TrueUsedItems[itemId] = amount + stack;
+		}
+
+		public void ConsumeItem(Recipe recipe, int itemId, ref int amount)
+		{
+			if (!TrueUsedItems.TryGetValue(itemId, out amount))
 				amount = 0;
 		}
 
 		public void OnCraft(Recipe _, Item item)
 		{
-			List<KeyValuePair<int, int>> keyValuePairs = RecipeInfo.TrueUsedItems.ToList();
-			foreach (KeyValuePair<int, int> keyValuePair in keyValuePairs.Where(keyValuePair => keyValuePair.Value < 0))
+			foreach (KeyValuePair<int, int> keyValuePair in TrueUsedItems.Where(keyValuePair => keyValuePair.Value < 0))
 				Main.LocalPlayer.QuickSpawnItem(keyValuePair.Key, -keyValuePair.Value);
 
 			List<KeyValuePair<Recipe, int>> recipes = RecipeInfo.RecipeUsed.ToList();

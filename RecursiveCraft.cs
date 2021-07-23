@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using Google.OrTools.LinearSolver;
 using Microsoft.Xna.Framework;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
@@ -16,11 +17,10 @@ namespace RecursiveCraft
 {
 	public class RecursiveCraft : Mod
 	{
-		public static Dictionary<int, List<Recipe>> RecipeByResult;
 		public static Dictionary<Recipe, RecipeInfo> RecipeInfoCache;
+		public static RecursiveSearch RecursiveSearch;
 		public static CompoundRecipe CompoundRecipe;
 
-		public static int DepthSearch;
 		public static bool InventoryIsOpen;
 		public static ModKeybind[] Hotkeys;
 		public static List<Func<bool>> InventoryChecks;
@@ -30,25 +30,16 @@ namespace RecursiveCraft
 		public override void Load()
 		{
 			ILRecipe.FindRecipes += ApplyRecursiveSearch;
-			
+
 			OnMain.DrawInventory += EditFocusRecipe;
-			OnMain.Update += ApplyKey;
 
 			RecipeInfoCache = new Dictionary<Recipe, RecipeInfo>();
-
-			Hotkeys = new[]
-			{
-				KeybindLoader.RegisterKeybind(this, "Infinite crafting depth", "Home"),
-				KeybindLoader.RegisterKeybind(this, "+1 crafting depth", "PageUp"),
-				KeybindLoader.RegisterKeybind(this, "-1 crafting depth", "PageDown"),
-				KeybindLoader.RegisterKeybind(this, "No crafting depth", "End")
-			};
 
 			InventoryChecks = new List<Func<bool>>
 			{
 				() => Main.playerInventory
 			};
-			
+
 			Ptr = NativeLibrary.Load(Path.Combine(Main.SavePath, "Mod Sources", Name, "lib",
 				"google-ortools-native.dll"));
 		}
@@ -56,33 +47,117 @@ namespace RecursiveCraft
 		public override void PostAddRecipes()
 		{
 			CompoundRecipe = new CompoundRecipe(this);
-			RecipeByResult = new Dictionary<int, List<Recipe>>();
+			Dictionary<Recipe, HashSet<Recipe>> parentRecipes = ExtractParentRecipes();
+			RecursiveSearch = new RecursiveSearch();
+			RecursiveSearch.InitializeSolvers(parentRecipes);
+		}
+
+		private static Dictionary<Recipe, HashSet<Recipe>> ExtractParentRecipes()
+		{
+			Dictionary<Recipe, HashSet<Recipe>> parentRecipes = new(); //Recipes in the ingredient side
+			Dictionary<Recipe, HashSet<Recipe>> childrenRecipes = new(); //Recipes in the product side
+			Dictionary<int, HashSet<Recipe>> itemCreators = new();
+			Dictionary<int, HashSet<Recipe>> itemUsers = new();
 
 			foreach (Recipe recipe in Main.recipe)
 			{
-				int type = recipe.createItem.type;
-				if (type == ItemID.None) break;
+				if (recipe.createItem.type == ItemID.None) break;
 
-				if (!RecipeByResult.TryGetValue(type, out List<Recipe> list))
+				HashSet<Recipe> parents = new();
+				HashSet<Recipe> children = new();
+				parentRecipes.Add(recipe, parents);
+				childrenRecipes.Add(recipe, children);
+
+				#region createItem checks
+
+				if (!itemCreators.TryGetValue(recipe.createItem.type, out HashSet<Recipe> creators))
 				{
-					list = new List<Recipe>();
-					RecipeByResult.Add(type, list);
+					creators = new HashSet<Recipe>();
+					itemCreators.Add(recipe.createItem.type, creators);
 				}
 
-				list.Add(recipe);
+				creators.Add(recipe);
+
+
+				if (itemUsers.TryGetValue(recipe.createItem.type, out HashSet<Recipe> users))
+					children.UnionWith(users);
+
+				#endregion
+
+				#region requiredItem checks
+
+				foreach (Item item in recipe.requiredItem)
+				{
+					HashSet<int> ingredients = new() {item.type};
+					foreach (HashSet<int> validItems in recipe.acceptedGroups
+						.Select(recipeAcceptedGroup => RecipeGroup.recipeGroups[recipeAcceptedGroup].ValidItems)
+						.Where(validItems => validItems.Contains(item.type)))
+						ingredients.UnionWith(validItems);
+
+					foreach (int type in ingredients)
+					{
+						if (!itemUsers.TryGetValue(type, out creators))
+						{
+							creators = new HashSet<Recipe>();
+							itemUsers.Add(type, creators);
+						}
+
+						creators.Add(recipe);
+
+
+						if (itemCreators.TryGetValue(type, out users)) parents.UnionWith(users);
+					}
+				}
+
+				#endregion
+
+				#region enlarge children
+
+				if (children.Count != 1)
+				{
+					for (var i = 0; i < children.Count; i++)
+					{
+						Recipe child = children.ElementAt(i);
+						children.UnionWith(childrenRecipes[child]);
+					}
+				}
+
+				#endregion
+
+				#region enlarge parents
+
+				if (parents.Count != 1)
+				{
+					for (var i = 0; i < parents.Count; i++)
+					{
+						Recipe parent = parents.ElementAt(i);
+						parents.UnionWith(childrenRecipes[parent]);
+					}
+				}
+
+				#endregion
+
+				#region propagate children
+
+				if (children.Count != 1 && parents.Count != 1)
+				{
+					foreach (Recipe child in children) parentRecipes[child].UnionWith(parents);
+					foreach (Recipe parent in parents) childrenRecipes[parent].UnionWith(children);
+				}
+
+				#endregion
 			}
+
+			return parentRecipes;
 		}
 
 		public override void Unload()
 		{
 			ILRecipe.FindRecipes -= ApplyRecursiveSearch;
 			OnMain.DrawInventory -= EditFocusRecipe;
-			OnMain.Update -= ApplyKey;
 
 			RecipeInfoCache = null;
-			RecipeByResult = null;
-
-			Hotkeys = null;
+			RecursiveSearch = null;
 
 			if (CompoundRecipe?.OverridenRecipe != null)
 				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
@@ -100,46 +175,6 @@ namespace RecursiveCraft
 			foreach (Func<bool> inventoryCheck in InventoryChecks) InventoryIsOpen |= inventoryCheck.Invoke();
 
 			return InventoryIsOpen == wasOpen;
-		}
-
-		public void ApplyKey(OnMain.orig_Update orig, Main self, GameTime gameTime)
-		{
-			if (UpdateInventoryState())
-				DepthSearch = ((RecursiveSettings) GetConfig("RecursiveSettings")).DefaultDepth;
-
-			if (InventoryIsOpen)
-			{
-				int oldDepth = DepthSearch;
-				if (Hotkeys[0].JustPressed)
-				{
-					DepthSearch = -1;
-				}
-				else if (Hotkeys[1].JustPressed)
-				{
-					if (DepthSearch == -1)
-						DepthSearch = 5;
-					else
-						DepthSearch++;
-				}
-				else if (Hotkeys[2].JustPressed)
-				{
-					if (DepthSearch == 0)
-						DepthSearch = 0;
-					else if (DepthSearch == 5)
-						DepthSearch = -1;
-					else
-						DepthSearch++;
-				}
-				else if (Hotkeys[3].JustPressed)
-				{
-					DepthSearch = 0;
-				}
-
-				if (oldDepth != DepthSearch)
-					Recipe.FindRecipes();
-			}
-
-			orig(self, gameTime);
 		}
 
 		public static void EditFocusRecipe(OnMain.orig_DrawInventory orig, Main self)
@@ -177,14 +212,15 @@ namespace RecursiveCraft
 			IEnumerable<ILLabel> incomingLabels = cursor.IncomingLabels.ToList();
 			foreach (ILLabel cursorIncomingLabel in incomingLabels) cursor.MarkLabel(cursorIncomingLabel);
 
-			cursor.Emit(OpCodes.Ldloc, 12);//Inventory
+			cursor.Emit(OpCodes.Ldloc, 12); //Inventory
 			cursor.Emit(OpCodes.Call, typeof(RecursiveCraft).GetMethod("FindRecipes"));
 			cursor.Emit(OpCodes.Br_S, label);
 
 			// Go before 'for (int num6 = 0; num6 < Main.numAvailableRecipes; num6++)'
 			if (!cursor.TryGotoNext(MoveType.Before,
 				instruction => instruction.OpCode == OpCodes.Ldc_I4_0 &&
-				               (instruction.Previous.OpCode == OpCodes.Brtrue || instruction.Previous.MatchNop() && instruction.Previous.Previous.OpCode == OpCodes.Brtrue)))
+				               (instruction.Previous.OpCode == OpCodes.Brtrue || instruction.Previous.MatchNop() &&
+					               instruction.Previous.Previous.OpCode == OpCodes.Brtrue)))
 				throw new Exception("The second hook on ApplyRecursiveSearch wasn't found");
 
 			cursor.MarkLabel(label);
@@ -193,15 +229,16 @@ namespace RecursiveCraft
 		public static void FindRecipes(Dictionary<int, int> inventory)
 		{
 			RecipeInfoCache.Clear();
-			RecursiveSearch recursiveSearch = new(inventory);
 
 			SortedSet<int> sortedAvailableRecipes = new();
 			for (int i = 0; i < Main.recipe.Length; i++)
 			{
 				Recipe recipe = Main.recipe[i];
+				if (recipe.createItem.type == ItemID.None)
+					break;
 				if (recipe == CompoundRecipe.Compound)
 					recipe = CompoundRecipe.OverridenRecipe;
-				RecipeInfo recipeInfo = recursiveSearch.FindIngredientsForRecipe(recipe, i);
+				RecipeInfo recipeInfo = RecursiveSearch.FindIngredientsForRecipe(recipe, inventory);
 				if (recipeInfo != null)
 				{
 					if (recipeInfo.RecipeUsed.Count > 1)

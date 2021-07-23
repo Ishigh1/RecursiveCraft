@@ -1,90 +1,107 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Google.OrTools.LinearSolver;
 using Terraria;
-using Terraria.ID;
 using Terraria.ModLoader;
 
 namespace RecursiveCraft
 {
 	public class RecursiveSearch
 	{
-		public CraftingState CraftingState;
-		public List<Constraint> Ingredients;
-		public Dictionary<int, Variable> Recipes;
-		public Solver Solver;
-		public LinearExpr ToMinimize;
-
-		[MethodImpl(MethodImplOptions.NoInlining)]
-		public RecursiveSearch(Dictionary<int, int> inventory, int maxDepth)
-		{
-			Solver = Solver.CreateSolver("GLOP");
-			ToMinimize = new LinearExpr();
-			Ingredients = new List<Constraint>();
-			Recipes = new Dictionary<int, Variable>();
-			PrepareSolver(inventory);
-		}
-		
-		[MethodImpl(MethodImplOptions.NoInlining)]
-		public RecursiveSearch(Dictionary<int, int> inventory) : this(inventory, RecursiveCraft.DepthSearch)
-		{
-		}
+		public Dictionary<Recipe, Solver> Solvers;
+		public Dictionary<Recipe, Dictionary<int, Constraint>> Ingredients;
+		public Dictionary<Recipe, HashSet<Recipe>> LinkedRecipes;
 
 		public static void InitializeOrTools()
 		{
-			NativeLibrary.SetDllImportResolver(typeof(LinearExpr).Assembly,
-				(name, assembly, path) => RecursiveCraft.Ptr);
+			NativeLibrary.SetDllImportResolver(typeof(LinearExpr).Assembly, (_, _, _) => RecursiveCraft.Ptr);
 		}
 
-		public void PrepareSolver(Dictionary<int, int> inventory)
+		public void InitializeSolvers(Dictionary<Recipe, HashSet<Recipe>> parentRecipes)
 		{
-			for (int itemId = 0; itemId < ItemLoader.ItemCount; itemId++)
+			Solvers = new Dictionary<Recipe, Solver>();
+			Ingredients = new Dictionary<Recipe, Dictionary<int, Constraint>>();
+			LinkedRecipes = parentRecipes;
+			foreach ((Recipe recipe, HashSet<Recipe> linkedRecipes) in parentRecipes)
 			{
-				if (!inventory.TryGetValue(itemId, out int quantity))
-					quantity = 0;
-				Ingredients.Add(Solver.MakeConstraint(-quantity, double.PositiveInfinity, ItemID.Search.GetName(itemId)));
-			}
+				linkedRecipes.Add(recipe);
+				Solver solver = Solver.CreateSolver("SCIP");
+				Solvers.Add(recipe, solver);
+				Dictionary<int, Constraint> currentIngredients = new();
+				Ingredients.Add(recipe, currentIngredients);
 
-			for (int index = 0; index < Main.recipe.Length; index++)
-			{
-				Recipe recipe = Main.recipe[index];
-				if (recipe.createItem.type == ItemID.None) break;
-				if (!IsAvailable(recipe)) continue;
-				Variable variable = Solver.MakeIntVar(0, double.PositiveInfinity, "recipe_" + index);
-				Recipes.Add(index, variable);
-				Ingredients[recipe.createItem.type].SetCoefficient(variable, recipe.createItem.stack);
-				foreach (Item item in recipe.requiredItem) Ingredients[item.type].SetCoefficient(variable, -item.stack);
-				ToMinimize += variable;
+				solver.MakeIntVarArray(linkedRecipes.Count + 1, 0, int.MaxValue, "recipe");
+
+				var toMinimize = new LinearExpr();
+
+				for (int i = 0; i < linkedRecipes.Count; i++)
+				{
+					Recipe linkedRecipe = linkedRecipes.ElementAt(i);
+					if (linkedRecipe == recipe)
+						toMinimize += 100000 * solver.Variable(i);
+					else
+					{
+						toMinimize -= solver.Variable(i);
+						AddItemConsumption(currentIngredients, recipe, i, linkedRecipe.createItem.type,
+							-linkedRecipe.createItem.stack);}
+					foreach (Item item in linkedRecipe.requiredItem)
+						AddItemConsumption(currentIngredients, recipe, i, item.type, item.stack);
+				}
+				solver.Minimize(toMinimize);
+
+				using (StreamWriter file =
+					new StreamWriter(@"D:\debug.txt", true))
+				{
+					file.WriteLine(solver.ExportModelAsLpFormat(false));
+				}
 			}
 		}
 
-		public RecipeInfo FindIngredientsForRecipe(Recipe recipe, int index, int timeCraft = 1)
+		public void AddItemConsumption(Dictionary<int, Constraint> currentIngredients, Recipe recipe, int recipeIndex,
+			int createItemType, int itemConsumed)
+		{
+			Solver solver = Solvers[recipe];
+			if (!currentIngredients.TryGetValue(createItemType, out Constraint constraint))
+			{
+				constraint = solver.MakeConstraint(int.MinValue, 0);
+				currentIngredients.Add(createItemType, constraint);
+			}
+
+			constraint.SetCoefficient(solver.Variable(recipeIndex), itemConsumed);
+		}
+
+		public RecipeInfo FindIngredientsForRecipe(Recipe recipe, Dictionary<int, int> inventory, int timeCraft = 1)
 		{
 			if (!IsAvailable(recipe)) return null;
-			Variable recipeVariable = Recipes[index];
-			recipeVariable.SetUb(timeCraft);
-			Solver.Maximize(recipeVariable);
-			Solver.Solve();
-			timeCraft = (int) recipeVariable.SolutionValue();
-			if (timeCraft == 0)
+
+			Solver solver = Solvers[recipe];
+
+			HashSet<Recipe> linkedRecipes = LinkedRecipes[recipe];
+			for (var i = 0; i < linkedRecipes.Count; i++)
 			{
-				recipeVariable.SetUb(double.PositiveInfinity);
-				return null;
+				Recipe linkedRecipe = linkedRecipes.ElementAt(i);
+				if (linkedRecipe == recipe)
+					solver.Variable(i).SetUb(timeCraft);
+				else if (!IsAvailable(linkedRecipe))
+					solver.Variable(i).SetUb(0);
+				else
+					solver.Variable(i).SetUb(int.MaxValue);
 			}
 
-			recipeVariable.SetLb(timeCraft);
-			Solver.Minimize(ToMinimize);
-			Solver.Solve();
-			RecipeInfo recipeInfo = new(this);
-			recipeVariable.SetBounds(0, double.PositiveInfinity);
-			return recipeInfo;
+			Dictionary<int, Constraint> ingredients = Ingredients[recipe];
+			foreach ((int itemId, Constraint constraint) in ingredients)
+			{
+				inventory.TryGetValue(itemId, out int availableAmount);
+				constraint.SetUb(availableAmount);
+			}
+
+			Solver.ResultStatus resultStatus = solver.Solve();
+			return resultStatus == Solver.ResultStatus.INFEASIBLE ? null : new RecipeInfo(solver, linkedRecipes);
 		}
 
-		public bool IsAvailable(Recipe recipe)
+		public static bool IsAvailable(Recipe recipe)
 		{
 			return RecipeLoader.RecipeAvailable(recipe) &&
 			       recipe.requiredTile.All(tile => Main.LocalPlayer.adjTile[tile]);
