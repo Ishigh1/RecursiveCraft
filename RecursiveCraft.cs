@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Google.OrTools.LinearSolver;
-using Microsoft.Xna.Framework;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using Terraria;
@@ -42,6 +40,23 @@ namespace RecursiveCraft
 
 			Ptr = NativeLibrary.Load(Path.Combine(Main.SavePath, "Mod Sources", Name, "lib",
 				"google-ortools-native.dll"));
+		}
+
+		public override void Unload()
+		{
+			ILRecipe.FindRecipes -= ApplyRecursiveSearch;
+			OnMain.DrawInventory -= EditFocusRecipe;
+
+			RecipeInfoCache = null;
+			RecursiveSearch = null;
+
+			if (CompoundRecipe?.OverridenRecipe != null)
+				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
+			CompoundRecipe = null;
+
+			InventoryChecks = null;
+
+			NativeLibrary.Free(Ptr);
 		}
 
 		public override void PostAddRecipes()
@@ -92,7 +107,10 @@ namespace RecursiveCraft
 					foreach (HashSet<int> validItems in recipe.acceptedGroups
 						.Select(recipeAcceptedGroup => RecipeGroup.recipeGroups[recipeAcceptedGroup].ValidItems)
 						.Where(validItems => validItems.Contains(item.type)))
+					{
 						ingredients.UnionWith(validItems);
+						break;
+					}
 
 					foreach (int type in ingredients)
 					{
@@ -114,13 +132,11 @@ namespace RecursiveCraft
 				#region enlarge children
 
 				if (children.Count != 1)
-				{
 					for (var i = 0; i < children.Count; i++)
 					{
 						Recipe child = children.ElementAt(i);
 						children.UnionWith(childrenRecipes[child]);
 					}
-				}
 
 				#endregion
 
@@ -149,23 +165,6 @@ namespace RecursiveCraft
 			}
 
 			return parentRecipes;
-		}
-
-		public override void Unload()
-		{
-			ILRecipe.FindRecipes -= ApplyRecursiveSearch;
-			OnMain.DrawInventory -= EditFocusRecipe;
-
-			RecipeInfoCache = null;
-			RecursiveSearch = null;
-
-			if (CompoundRecipe?.OverridenRecipe != null)
-				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
-			CompoundRecipe = null;
-
-			InventoryChecks = null;
-
-			NativeLibrary.Free(Ptr);
 		}
 
 		public static bool UpdateInventoryState()
@@ -231,9 +230,9 @@ namespace RecursiveCraft
 			RecipeInfoCache.Clear();
 
 			SortedSet<int> sortedAvailableRecipes = new();
-			for (int i = 0; i < Main.recipe.Length; i++)
+			foreach (Recipe r in Main.recipe)
 			{
-				Recipe recipe = Main.recipe[i];
+				Recipe recipe = r;
 				if (recipe.createItem.type == ItemID.None)
 					break;
 				if (recipe == CompoundRecipe.Compound)
@@ -243,7 +242,7 @@ namespace RecursiveCraft
 				{
 					if (recipeInfo.RecipeUsed.Count > 1)
 						RecipeInfoCache.Add(recipe, recipeInfo);
-					sortedAvailableRecipes.Add(i);
+					sortedAvailableRecipes.Add(recipe.RecipeIndex);
 				}
 			}
 

@@ -39,14 +39,11 @@ namespace RecursiveCraft
 			{
 				Compound.AddCondition(recipe.Conditions);
 				foreach (int tileId in recipe.requiredTile) Compound.AddTile(tileId);
-				if(recipe == OverridenRecipe)
+				if (recipe == OverridenRecipe)
 					continue;
-				for (int i = 0; i < timeCraft; i++)
-				{
-					AddIngredient(recipe, recipe.createItem.type, -recipe.createItem.stack);
-					foreach (Item item in recipe.requiredItem)
-						AddIngredient(recipe, item.type, item.stack);
-				}
+				AddIngredient(recipe, recipe.createItem.type, -recipe.createItem.stack * timeCraft);
+				foreach (Item item in recipe.requiredItem)
+					AddIngredient(recipe, item.type, item.stack * timeCraft);
 			}
 
 			Compound.requiredItem.RemoveAll(item => item.stack <= 0);
@@ -59,14 +56,7 @@ namespace RecursiveCraft
 			else
 				Compound.AddIngredient(itemId, stack);
 
-			if (stack > 0)
-			{
-				PropertyInfo consumeItem = typeof(Recipe).GetProperty("ConsumeItemHooks",
-					BindingFlags.NonPublic | BindingFlags.Instance);
-				Recipe.ConsumeItemCallback consumeItemCallback =
-					(Recipe.ConsumeItemCallback) consumeItem.GetGetMethod().Invoke(recipe, null);
-				consumeItemCallback?.Invoke(recipe, itemId, ref stack);
-			}
+			if (stack > 0) RecipeLoader.ConsumeItem(recipe, itemId, ref stack);
 
 			TrueUsedItems.TryGetValue(itemId, out int amount);
 			TrueUsedItems[itemId] = amount + stack;
@@ -80,8 +70,8 @@ namespace RecursiveCraft
 
 		public void OnCraft(Recipe _, Item item)
 		{
-			foreach (KeyValuePair<int, int> keyValuePair in TrueUsedItems.Where(keyValuePair => keyValuePair.Value < 0))
-				Main.LocalPlayer.QuickSpawnItem(keyValuePair.Key, -keyValuePair.Value);
+			foreach ((int itemId, int stack) in TrueUsedItems.Where(keyValuePair => keyValuePair.Value < 0))
+				Main.LocalPlayer.QuickSpawnItem(itemId, -stack);
 
 			List<KeyValuePair<Recipe, int>> recipes = RecipeInfo.RecipeUsed.ToList();
 			for (int i = 0; i < recipes.Count; i++)

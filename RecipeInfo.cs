@@ -1,8 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using Google.OrTools.LinearSolver;
 using Terraria;
 
 namespace RecursiveCraft
@@ -11,16 +7,15 @@ namespace RecursiveCraft
 	{
 		public readonly Dictionary<Recipe, int> RecipeUsed;
 
-		public RecipeInfo(Solver solver, IReadOnlyCollection<Recipe> linkedRecipes)
+		public RecipeInfo(RecursiveSearch recursiveSearch, Recipe mainRecipe)
 		{
 			RecipeUsed = new Dictionary<Recipe, int>();
-
-			for (var i = 0; i < linkedRecipes.Count; i++)
+			
+			foreach (Recipe recipe in recursiveSearch.LinkedRecipes[mainRecipe])
 			{
-				int recipeUsage = (int) solver.Variable(i).SolutionValue();
+				int recipeUsage = (int) recursiveSearch.Variables[recipe][(VariableType.Recipe, recipe.RecipeIndex)].SolutionValue();
 				if(recipeUsage == 0)
 					continue;
-				Recipe recipe = linkedRecipes.ElementAt(i);
 				RecipeUsed.Add(recipe, recipeUsage);
 			}
 		}
