@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
+using Newtonsoft.Json;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -64,6 +65,16 @@ namespace RecursiveCraft
 			CompoundRecipe = new CompoundRecipe(this);
 			Dictionary<Recipe, HashSet<Recipe>> parentRecipes = ExtractParentRecipes();
 			RecursiveSearch = new RecursiveSearch();
+			using (StreamWriter file =
+				new StreamWriter(@"D:\debug.txt", true))
+			{
+				foreach ((Recipe key, HashSet<Recipe> value) in parentRecipes)
+				{
+					file.WriteLine(value.Aggregate(key.RecipeIndex + " : ",
+						(current, recipe) => current + (recipe.RecipeIndex + ", ")));
+				}
+			}
+
 			RecursiveSearch.InitializeSolvers(parentRecipes);
 		}
 
@@ -73,6 +84,11 @@ namespace RecursiveCraft
 			Dictionary<Recipe, HashSet<Recipe>> childrenRecipes = new(); //Recipes in the product side
 			Dictionary<int, HashSet<Recipe>> itemCreators = new();
 			Dictionary<int, HashSet<Recipe>> itemUsers = new();
+			for (int i = 0; i < ItemLoader.ItemCount; i++)
+			{
+				itemCreators[i] = new HashSet<Recipe>();
+				itemUsers[i] = new HashSet<Recipe>();
+			}
 
 			foreach (Recipe recipe in Main.recipe)
 			{
@@ -80,22 +96,15 @@ namespace RecursiveCraft
 
 				HashSet<Recipe> parents = new();
 				HashSet<Recipe> children = new();
+				parents.Add(recipe);
+				children.Add(recipe);
 				parentRecipes.Add(recipe, parents);
 				childrenRecipes.Add(recipe, children);
 
 				#region createItem checks
 
-				if (!itemCreators.TryGetValue(recipe.createItem.type, out HashSet<Recipe> creators))
-				{
-					creators = new HashSet<Recipe>();
-					itemCreators.Add(recipe.createItem.type, creators);
-				}
-
-				creators.Add(recipe);
-
-
-				if (itemUsers.TryGetValue(recipe.createItem.type, out HashSet<Recipe> users))
-					children.UnionWith(users);
+				itemCreators[recipe.createItem.type].Add(recipe);
+				children.UnionWith(itemUsers[recipe.createItem.type]);
 
 				#endregion
 
@@ -104,26 +113,20 @@ namespace RecursiveCraft
 				foreach (Item item in recipe.requiredItem)
 				{
 					HashSet<int> ingredients = new() {item.type};
-					foreach (HashSet<int> validItems in recipe.acceptedGroups
-						.Select(recipeAcceptedGroup => RecipeGroup.recipeGroups[recipeAcceptedGroup].ValidItems)
-						.Where(validItems => validItems.Contains(item.type)))
+					foreach (int recipeAcceptedGroup in recipe.acceptedGroups)
 					{
-						ingredients.UnionWith(validItems);
-						break;
+						HashSet<int> validItems = RecipeGroup.recipeGroups[recipeAcceptedGroup].ValidItems;
+						if (validItems.Contains(item.type))
+						{
+							ingredients.UnionWith(validItems);
+							break;
+						}
 					}
 
 					foreach (int type in ingredients)
 					{
-						if (!itemUsers.TryGetValue(type, out creators))
-						{
-							creators = new HashSet<Recipe>();
-							itemUsers.Add(type, creators);
-						}
-
-						creators.Add(recipe);
-
-
-						if (itemCreators.TryGetValue(type, out users)) parents.UnionWith(users);
+						itemUsers[type].Add(recipe);
+						parents.UnionWith(itemCreators[type]);
 					}
 				}
 
@@ -131,35 +134,33 @@ namespace RecursiveCraft
 
 				#region enlarge children
 
-				if (children.Count != 1)
-					for (var i = 0; i < children.Count; i++)
-					{
-						Recipe child = children.ElementAt(i);
+				for (var i = 0; i < children.Count; i++)
+				{
+					Recipe child = children.ElementAt(i);
+					if (child != recipe)
 						children.UnionWith(childrenRecipes[child]);
-					}
+				}
 
 				#endregion
 
 				#region enlarge parents
 
-				if (parents.Count != 1)
+				for (var i = 0; i < parents.Count; i++)
 				{
-					for (var i = 0; i < parents.Count; i++)
-					{
-						Recipe parent = parents.ElementAt(i);
-						parents.UnionWith(childrenRecipes[parent]);
-					}
+					Recipe parent = parents.ElementAt(i);
+					if (parent != recipe)
+						parents.UnionWith(parentRecipes[parent]);
 				}
 
 				#endregion
 
 				#region propagate children
 
-				if (children.Count != 1 && parents.Count != 1)
-				{
-					foreach (Recipe child in children) parentRecipes[child].UnionWith(parents);
-					foreach (Recipe parent in parents) childrenRecipes[parent].UnionWith(children);
-				}
+				foreach (Recipe child in children.Where(child => child != recipe))
+					parentRecipes[child].UnionWith(parents);
+
+				foreach (Recipe parent in parents.Where(parent => parent != recipe))
+					childrenRecipes[parent].UnionWith(children);
 
 				#endregion
 			}
