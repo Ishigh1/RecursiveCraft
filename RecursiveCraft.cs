@@ -5,12 +5,12 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
-using Newtonsoft.Json;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
 using ILRecipe = IL.Terraria.Recipe;
 using OnMain = On.Terraria.Main;
+using OnContentSamples = On.Terraria.ID.ContentSamples;
 
 namespace RecursiveCraft
 {
@@ -32,6 +32,8 @@ namespace RecursiveCraft
 
 			OnMain.DrawInventory += EditFocusRecipe;
 
+			OnContentSamples.RebuildItemCreativeSortingIDsAfterRecipesAreSetUp += InitializeSolvers; 
+
 			RecipeInfoCache = new Dictionary<Recipe, RecipeInfo>();
 
 			InventoryChecks = new List<Func<bool>>
@@ -46,7 +48,10 @@ namespace RecursiveCraft
 		public override void Unload()
 		{
 			ILRecipe.FindRecipes -= ApplyRecursiveSearch;
+			
 			OnMain.DrawInventory -= EditFocusRecipe;
+
+			OnContentSamples.RebuildItemCreativeSortingIDsAfterRecipesAreSetUp -= InitializeSolvers; 
 
 			RecipeInfoCache = null;
 			RecursiveSearch = null;
@@ -60,22 +65,19 @@ namespace RecursiveCraft
 			NativeLibrary.Free(Ptr);
 		}
 
-		public override void PostAddRecipes()
+		public override void AddRecipes()
 		{
 			CompoundRecipe = new CompoundRecipe(this);
+		}
+
+		public static void InitializeSolvers(OnContentSamples.orig_RebuildItemCreativeSortingIDsAfterRecipesAreSetUp orig)
+		{
 			Dictionary<Recipe, HashSet<Recipe>> parentRecipes = ExtractParentRecipes();
 			RecursiveSearch = new RecursiveSearch();
-			using (StreamWriter file =
-				new StreamWriter(@"D:\debug.txt", true))
-			{
-				foreach ((Recipe key, HashSet<Recipe> value) in parentRecipes)
-				{
-					file.WriteLine(value.Aggregate(key.RecipeIndex + " : ",
-						(current, recipe) => current + (recipe.RecipeIndex + ", ")));
-				}
-			}
 
 			RecursiveSearch.InitializeSolvers(parentRecipes);
+
+			orig();
 		}
 
 		private static Dictionary<Recipe, HashSet<Recipe>> ExtractParentRecipes()
@@ -231,13 +233,10 @@ namespace RecursiveCraft
 			RecipeInfoCache.Clear();
 
 			SortedSet<int> sortedAvailableRecipes = new();
-			foreach (Recipe r in Main.recipe)
+			for (int index = 0; index < Recipe.numRecipes; index++)
 			{
-				Recipe recipe = r;
-				if (recipe.createItem.type == ItemID.None)
-					break;
-				if (recipe == CompoundRecipe.Compound)
-					recipe = CompoundRecipe.OverridenRecipe;
+				Recipe r = Main.recipe[index];
+				Recipe recipe = r == CompoundRecipe.Compound ? CompoundRecipe.OverridenRecipe : r;
 				RecipeInfo recipeInfo = RecursiveSearch.FindIngredientsForRecipe(recipe, inventory);
 				if (recipeInfo != null)
 				{

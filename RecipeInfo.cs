@@ -13,7 +13,7 @@ namespace RecursiveCraft
 			
 			foreach (Recipe recipe in recursiveSearch.LinkedRecipes[mainRecipe])
 			{
-				int recipeUsage = (int) recursiveSearch.Variables[recipe][(VariableType.Recipe, recipe.RecipeIndex)].SolutionValue();
+				int recipeUsage = (int) recursiveSearch.Variables[mainRecipe][(VariableType.Recipe, recipe.RecipeIndex)].SolutionValue();
 				if(recipeUsage == 0)
 					continue;
 				RecipeUsed.Add(recipe, recipeUsage);
