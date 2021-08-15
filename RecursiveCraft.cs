@@ -199,25 +199,29 @@ namespace RecursiveCraft
 		public static void ApplyRecursiveSearch(ILContext il)
 		{
 			ILCursor cursor = new(il);
+			/*
+			 * Go before 'for (int n = 0; n < maxRecipes && Main.recipe[n].createItem.type != 0; n++)' that is after the
+			 * 'for (int m = 0; m < 40; m++)' loop
+			 */
+
 			if (!cursor.TryGotoNext(MoveType.After,
-				instruction => instruction.OpCode == OpCodes.Blt_S && instruction.Previous.MatchLdcI4(40)))
-				return;
+				instruction => instruction.OpCode == OpCodes.Brtrue && instruction.Previous.MatchLdloc(30)))
+				throw new Exception("The first hook on ApplyRecursiveSearch wasn't found");
+			while (cursor.Next.MatchNop()) cursor.GotoNext();
 			ILLabel label = cursor.DefineLabel();
 			IEnumerable<ILLabel> incomingLabels = cursor.IncomingLabels.ToList();
 			foreach (ILLabel cursorIncomingLabel in incomingLabels) cursor.MarkLabel(cursorIncomingLabel);
 
-			cursor.Emit(OpCodes.Ldloc, 6);
+			cursor.Emit(OpCodes.Ldloc, 12); //Inventory
 			cursor.Emit(OpCodes.Call, typeof(RecursiveCraft).GetMethod("FindRecipes"));
 			cursor.Emit(OpCodes.Br_S, label);
-			if (!cursor.TryGotoNext(MoveType.Before,
-				instruction => instruction.OpCode == OpCodes.Ldc_I4_0 && instruction.Previous.OpCode == OpCodes.Brtrue))
-			{
-				cursor.Index -= 3;
-				cursor.RemoveRange(3);
-				foreach (ILLabel cursorIncomingLabel in incomingLabels) cursor.MarkLabel(cursorIncomingLabel);
 
-				return;
-			}
+			// Go before 'for (int num6 = 0; num6 < Main.numAvailableRecipes; num6++)'
+			if (!cursor.TryGotoNext(MoveType.Before,
+				instruction => instruction.OpCode == OpCodes.Ldc_I4_0 &&
+				               (instruction.Previous.OpCode == OpCodes.Brtrue || instruction.Previous.MatchNop() &&
+					               instruction.Previous.Previous.OpCode == OpCodes.Brtrue)))
+				throw new Exception("The second hook on ApplyRecursiveSearch wasn't found");
 
 			cursor.MarkLabel(label);
 		}
