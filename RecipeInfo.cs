@@ -9,8 +9,7 @@ namespace RecursiveCraft
 		public readonly Dictionary<int, int> TrueUsedItems;
 		public readonly Dictionary<int, int> UsedItems;
 
-		public RecipeInfo(Dictionary<int, int> usedItems, Dictionary<int, int> trueUsedItems,
-			Dictionary<Recipe, int> recipeUsed)
+		public RecipeInfo(Dictionary<int, int> usedItems, Dictionary<int, int> trueUsedItems, Dictionary<Recipe, int> recipeUsed)
 		{
 			UsedItems = usedItems;
 			TrueUsedItems = trueUsedItems;
