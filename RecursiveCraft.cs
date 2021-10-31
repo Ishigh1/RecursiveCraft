@@ -4,8 +4,8 @@ using System.Linq;
 using Microsoft.Xna.Framework;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
+using RecursiveCraft.CraftingTree;
 using Terraria;
-using Terraria.ID;
 using Terraria.ModLoader;
 using ILRecipe = IL.Terraria.Recipe;
 using OnMain = On.Terraria.Main;
@@ -67,65 +67,9 @@ namespace RecursiveCraft
 
 		public override void PostAddRecipes()
 		{
-			CompoundRecipe = new CompoundRecipe(this);
-			RecipeByResult = new Dictionary<int, List<Recipe>>();
-
-			Dictionary<int, int> ingredientsNeeded = new();
-			Dictionary<Recipe, int> correspondingId = new();
-			float[] costs = new float[Recipe.maxRecipes];
-
-			foreach (Recipe recipe in Main.recipe)
-			{
-				int type = recipe.createItem.type;
-				if (type == ItemID.None) break;
-
-				if (!RecipeByResult.TryGetValue(type, out List<Recipe> list))
-				{
-					list = new List<Recipe>();
-					RecipeByResult.Add(type, list);
-					if (!ingredientsNeeded.ContainsKey(type))
-						ingredientsNeeded[type] = 0;
-				}
-
-				list.Add(recipe);
-			}
-
-			for (int index = 0; index < Recipe.maxRecipes; index++)
-			{
-				Recipe recipe = Main.recipe[index];
-				correspondingId[recipe] = index;
-
-				float cost = 1;
-				foreach (Item ingredient in recipe.requiredItem)
-				{
-					if (ingredient.type == ItemID.None) break;
-					foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipe, ingredient))
-					{
-						if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe> list))
-							cost += list.Count * ingredient.stack;
-
-						if (ingredientsNeeded.TryGetValue(possibleIngredient, out int timesUsed))
-							ingredientsNeeded[possibleIngredient] = timesUsed + 1;
-						else
-							ingredientsNeeded[possibleIngredient] = 1;
-					}
-				}
-
-				costs[index] = cost / recipe.createItem.stack;
-			}
-
-			foreach (List<Recipe> recipes in RecipeByResult.Select(keyValuePair => keyValuePair.Value))
-				recipes.Sort((recipe1, recipe2) =>
-					(int) (costs[correspondingId[recipe2]] - costs[correspondingId[recipe1]]));
-
-			List<KeyValuePair<int, int>> sortedIngredientList = ingredientsNeeded.ToList();
-			sortedIngredientList.Sort((pair, valuePair) => valuePair.Value - pair.Value);
-
-			SortedRecipeList = new List<int>();
-			foreach (KeyValuePair<int, int> keyValuePair in sortedIngredientList)
-				if (RecipeByResult.TryGetValue(keyValuePair.Key, out List<Recipe> recipes))
-					foreach (Recipe recipe in recipes)
-						SortedRecipeList.Add(correspondingId[recipe]);
+			Tree tree = new();
+			for (int i = 0; i < Recipe.numRecipes; i++) tree.AddRecipe(Main.recipe[i]);
+			tree.AnalyseTree();
 		}
 
 		public static bool UpdateInventoryState()

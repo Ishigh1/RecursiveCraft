@@ -143,7 +143,8 @@ namespace RecursiveCraft
 
 		public static int DiscountRecipe(Recipe recipe, int trueTimeCraft, Item ingredient)
 		{
-			PropertyInfo propertyInfo = typeof(Recipe).GetProperty("ConsumeItemHooks", BindingFlags.Instance | BindingFlags.NonPublic);
+			PropertyInfo propertyInfo =
+				typeof(Recipe).GetProperty("ConsumeItemHooks", BindingFlags.Instance | BindingFlags.NonPublic);
 			Recipe.ConsumeItemCallback consumeItemHooks =
 				propertyInfo.GetMethod.Invoke(recipe, null) as Recipe.ConsumeItemCallback;
 			int discount = 0;
