@@ -10,7 +10,7 @@ namespace RecursiveCraft
 {
 	public class RecursiveSearch
 	{
-		public CraftingState CraftingState;
+		public CraftingState CraftingState = null!;
 		public Dictionary<int, int> Inventory;
 		public int MaxDepth;
 		public Dictionary<Recipe, bool> PossibleCraftCache;
@@ -26,7 +26,7 @@ namespace RecursiveCraft
 		{
 		}
 
-		public RecipeInfo FindIngredientsForRecipe(Recipe recipe, int timeCraft = 1)
+		public RecipeInfo? FindIngredientsForRecipe(Recipe recipe, int timeCraft = 1)
 		{
 			CraftingState = new CraftingState(Inventory);
 			bool craftable = CraftableAmount(recipe, recipe.createItem.stack * timeCraft,
@@ -130,7 +130,7 @@ namespace RecursiveCraft
 			int validItem, ref int ingredientsNeeded, ref int trueIngredientsNeeded)
 		{
 			if (!newForbiddenItems.Contains(validItem) &&
-			    RecursiveCraft.RecipeByResult.TryGetValue(validItem, out List<Recipe> usableRecipes))
+			    RecursiveCraft.RecipeByResult.TryGetValue(validItem, out List<Recipe>? usableRecipes))
 				foreach (Recipe ingredientRecipe in usableRecipes)
 				{
 					(int craftedAmount, int trueCraftedAmount) = CraftableAmount(ingredientRecipe, ingredientsNeeded,
@@ -143,17 +143,18 @@ namespace RecursiveCraft
 
 		public static int DiscountRecipe(Recipe recipe, int trueTimeCraft, Item ingredient)
 		{
-			PropertyInfo propertyInfo = typeof(Recipe).GetProperty("ConsumeItemHooks", BindingFlags.Instance | BindingFlags.NonPublic);
-			Recipe.ConsumeItemCallback consumeItemHooks =
-				propertyInfo.GetMethod.Invoke(recipe, null) as Recipe.ConsumeItemCallback;
+			PropertyInfo propertyInfo = typeof(Recipe).GetProperty("ConsumeItemHooks", BindingFlags.Instance | BindingFlags.NonPublic)!;
+			Recipe.ConsumeItemCallback? consumeItemHooks = (Recipe.ConsumeItemCallback?) propertyInfo.GetMethod!.Invoke(recipe, null);
+			if (consumeItemHooks == null)
+				return 0;
+
 			int discount = 0;
-			if (consumeItemHooks != null)
-				for (int i = 0; i < trueTimeCraft; i++)
-				{
-					int consumedItems = ingredient.stack;
-					consumeItemHooks.Invoke(recipe, ingredient.type, ref consumedItems);
-					discount += ingredient.stack - consumedItems;
-				}
+			for (int i = 0; i < trueTimeCraft; i++)
+			{
+				int consumedItems = ingredient.stack;
+				consumeItemHooks(recipe, ingredient.type, ref consumedItems);
+				discount += ingredient.stack - consumedItems;
+			}
 
 			return discount;
 		}

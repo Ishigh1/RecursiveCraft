@@ -14,15 +14,15 @@ namespace RecursiveCraft
 {
 	public class RecursiveCraft : Mod
 	{
-		public static Dictionary<int, List<Recipe>> RecipeByResult;
-		public static Dictionary<Recipe, RecipeInfo> RecipeInfoCache;
-		public static List<int> SortedRecipeList;
-		public static CompoundRecipe CompoundRecipe;
+		public static Dictionary<int, List<Recipe>> RecipeByResult = null!;
+		public static Dictionary<Recipe, RecipeInfo> RecipeInfoCache = null!;
+		public static List<int> SortedRecipeList = null!;
+		public static CompoundRecipe CompoundRecipe = null!;
 
 		public static int DepthSearch;
 		public static bool InventoryIsOpen;
-		public static ModKeybind[] Hotkeys;
-		public static List<Func<bool>> InventoryChecks;
+		public static ModKeybind[] Hotkeys = null!;
+		public static List<Func<bool>> InventoryChecks = null!;
 
 		public override void Load()
 		{
@@ -52,17 +52,17 @@ namespace RecursiveCraft
 			OnMain.DrawInventory -= EditFocusRecipe;
 			OnMain.Update -= ApplyKey;
 
-			RecipeInfoCache = null;
-			RecipeByResult = null;
-			SortedRecipeList = null;
+			RecipeInfoCache = null!;
+			RecipeByResult = null!;
+			SortedRecipeList = null!;
 
-			Hotkeys = null;
+			Hotkeys = null!;
 
-			if (CompoundRecipe?.OverridenRecipe != null)
+			if (CompoundRecipe?.OverridenRecipe != null) // ?. required because tml loading is not perfect
 				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
-			CompoundRecipe = null;
+			CompoundRecipe = null!;
 
-			InventoryChecks = null;
+			InventoryChecks = null!;
 		}
 
 		public override void PostAddRecipes()
@@ -79,7 +79,7 @@ namespace RecursiveCraft
 				int type = recipe.createItem.type;
 				if (type == ItemID.None) break;
 
-				if (!RecipeByResult.TryGetValue(type, out List<Recipe> list))
+				if (!RecipeByResult.TryGetValue(type, out List<Recipe>? list))
 				{
 					list = new List<Recipe>();
 					RecipeByResult.Add(type, list);
@@ -101,7 +101,7 @@ namespace RecursiveCraft
 					if (ingredient.type == ItemID.None) break;
 					foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipe, ingredient))
 					{
-						if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe> list))
+						if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe>? list))
 							cost += list.Count * ingredient.stack;
 
 						if (ingredientsNeeded.TryGetValue(possibleIngredient, out int timesUsed))
@@ -123,7 +123,7 @@ namespace RecursiveCraft
 
 			SortedRecipeList = new List<int>();
 			foreach (KeyValuePair<int, int> keyValuePair in sortedIngredientList)
-				if (RecipeByResult.TryGetValue(keyValuePair.Key, out List<Recipe> recipes))
+				if (RecipeByResult.TryGetValue(keyValuePair.Key, out List<Recipe>? recipes))
 					foreach (Recipe recipe in recipes)
 						SortedRecipeList.Add(correspondingId[recipe]);
 		}
@@ -132,7 +132,7 @@ namespace RecursiveCraft
 		{
 			bool wasOpen = InventoryIsOpen;
 			InventoryIsOpen = false;
-			foreach (Func<bool> inventoryCheck in InventoryChecks) InventoryIsOpen |= inventoryCheck.Invoke();
+			foreach (Func<bool> inventoryCheck in InventoryChecks) InventoryIsOpen |= inventoryCheck();
 
 			return InventoryIsOpen == wasOpen;
 		}
@@ -183,7 +183,7 @@ namespace RecursiveCraft
 				Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
 			int i = Main.availableRecipe[Main.focusRecipe];
 			Recipe recipe = Main.recipe[i];
-			if (RecipeInfoCache.TryGetValue(recipe, out RecipeInfo recipeInfo))
+			if (RecipeInfoCache.TryGetValue(recipe, out RecipeInfo? recipeInfo))
 			{
 				CompoundRecipe.Apply(i, recipeInfo);
 				Main.recipe[i] = CompoundRecipe.Compound;
@@ -207,13 +207,15 @@ namespace RecursiveCraft
 			if (!cursor.TryGotoNext(MoveType.After,
 				instruction => instruction.OpCode == OpCodes.Brtrue && instruction.Previous.MatchLdloc(30)))
 				throw new Exception("The first hook on ApplyRecursiveSearch wasn't found");
+
 			while (cursor.Next.MatchNop()) cursor.GotoNext();
+
 			ILLabel label = cursor.DefineLabel();
 			IEnumerable<ILLabel> incomingLabels = cursor.IncomingLabels.ToList();
 			foreach (ILLabel cursorIncomingLabel in incomingLabels) cursor.MarkLabel(cursorIncomingLabel);
 
 			cursor.Emit(OpCodes.Ldloc, 12); //Inventory
-			cursor.Emit(OpCodes.Call, typeof(RecursiveCraft).GetMethod("FindRecipes"));
+			cursor.Emit(OpCodes.Call, typeof(RecursiveCraft).GetMethod(nameof(FindRecipes)));
 			cursor.Emit(OpCodes.Br_S, label);
 
 			// Go before 'for (int num6 = 0; num6 < Main.numAvailableRecipes; num6++)'
@@ -236,8 +238,8 @@ namespace RecursiveCraft
 			{
 				Recipe recipe = Main.recipe[n];
 				if (recipe == CompoundRecipe.Compound)
-					recipe = CompoundRecipe.OverridenRecipe;
-				RecipeInfo recipeInfo = recursiveSearch.FindIngredientsForRecipe(recipe);
+					recipe = CompoundRecipe.OverridenRecipe!;
+				RecipeInfo? recipeInfo = recursiveSearch.FindIngredientsForRecipe(recipe);
 				if (recipeInfo != null)
 				{
 					if (recipeInfo.RecipeUsed.Count > 1)

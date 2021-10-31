@@ -8,9 +8,9 @@ namespace RecursiveCraft
 	public class CompoundRecipe
 	{
 		public Recipe Compound;
-		public Recipe OverridenRecipe;
+		public Recipe? OverridenRecipe;
 		public int RecipeId;
-		public RecipeInfo RecipeInfo;
+		public RecipeInfo RecipeInfo = null!;
 
 		public CompoundRecipe(Mod mod)
 		{
@@ -51,9 +51,8 @@ namespace RecursiveCraft
 
 		public void OnCraft(Recipe _, Item item)
 		{
-			List<KeyValuePair<int, int>> keyValuePairs = RecipeInfo.TrueUsedItems.ToList();
-			foreach (KeyValuePair<int, int> keyValuePair in keyValuePairs.Where(keyValuePair => keyValuePair.Value < 0))
-				Main.LocalPlayer.QuickSpawnItem(keyValuePair.Key, -keyValuePair.Value);
+			foreach ((int type, int stack) in RecipeInfo.TrueUsedItems.Where(keyValuePair => keyValuePair.Value < 0))
+				Main.LocalPlayer.QuickSpawnItem(type, -stack);
 
 			List<KeyValuePair<Recipe, int>> recipes = RecipeInfo.RecipeUsed.ToList();
 			for (int i = 0; i < recipes.Count; i++)
@@ -61,17 +60,9 @@ namespace RecursiveCraft
 				Recipe recipe = recipes[i].Key;
 				int timesCrafted = recipes[i].Value;
 
-				Item targetItem;
-				if (i == 0)
-				{
-					targetItem = item;
-				}
-				else
-				{
-					targetItem = new Item();
-					targetItem.SetDefaults(recipe.createItem.type);
-					targetItem.stack = recipe.createItem.stack;
-				}
+				Item targetItem = i == 0
+					? item
+					: new Item(recipe.createItem.type, recipe.createItem.stack);
 
 				for (int j = 0; j < timesCrafted; j++)
 					RecipeLoader.OnCraft(targetItem, recipe);
