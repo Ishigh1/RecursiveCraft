@@ -1,5 +1,3 @@
 Recursive Craft is a QOL mod that allows you to craft items directly without having to craft the intermediate (so you could craft a table with walls)
 
 If too many craft are shown this way, you can configure the number of intermediate recipes that can be used (unlimited by default)
-
-This version is a direct port of the 1.3 version, I am working on a better version.
