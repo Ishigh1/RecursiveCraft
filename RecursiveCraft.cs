@@ -67,12 +67,23 @@ public class RecursiveCraft : Mod
 
 	public override void PostAddRecipes()
 	{
+		CompoundRecipe = new CompoundRecipe(this);
 		DiscoverRecipes();
 	}
 
-	private void DiscoverRecipes()
+	public override object Call(params object[] args)
 	{
-		CompoundRecipe = new CompoundRecipe(this);
+		if (args.Length == 1 && "DiscoverRecipes".Equals(args[0]))
+		{
+			DiscoverRecipes();
+			return null;
+		}
+
+		throw new ArgumentException("Invalid arguments");
+	}
+
+	public void DiscoverRecipes()
+	{
 		RecipeByResult = new Dictionary<int, List<Recipe>>();
 
 		Dictionary<int, int> ingredientsNeeded = new();
@@ -106,7 +117,7 @@ public class RecursiveCraft : Mod
 				if (ingredient.type == ItemID.None) break;
 				foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipe, ingredient))
 				{
-					if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe>? list))
+					if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe> list))
 						cost += list.Count * ingredient.stack;
 
 					if (ingredientsNeeded.TryGetValue(possibleIngredient, out int timesUsed))
