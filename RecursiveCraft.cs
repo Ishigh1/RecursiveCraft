@@ -26,10 +26,6 @@ public class RecursiveCraft : Mod
 
 	public override void Load()
 	{
-		ILRecipe.FindRecipes += ApplyRecursiveSearch;
-		OnMain.DrawInventory += EditFocusRecipe;
-		OnMain.Update += ApplyKey;
-
 		RecipeInfoCache = new Dictionary<Recipe, RecipeInfo>();
 
 		Hotkeys = new[]
@@ -44,6 +40,10 @@ public class RecursiveCraft : Mod
 		{
 			() => Main.playerInventory
 		};
+		
+		ILRecipe.FindRecipes += ApplyRecursiveSearch;
+		OnMain.DrawInventory += EditFocusRecipe;
+		OnMain.Update += ApplyKey;
 	}
 
 	public override void Unload()
