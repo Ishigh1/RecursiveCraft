@@ -48,10 +48,6 @@ public class RecursiveCraft : Mod
 
 	public override void Unload()
 	{
-		ILRecipe.FindRecipes -= ApplyRecursiveSearch;
-		OnMain.DrawInventory -= EditFocusRecipe;
-		OnMain.Update -= ApplyKey;
-
 		RecipeInfoCache = null!;
 		RecipeByResult = null!;
 		SortedRecipeList = null!;
@@ -67,8 +63,7 @@ public class RecursiveCraft : Mod
 
 	public override void PostAddRecipes()
 	{
-		CompoundRecipe = new CompoundRecipe(this);
-		DiscoverRecipes();
+		CompoundRecipe = new CompoundRecipe();
 	}
 
 	public override object Call(params object[] args)
@@ -264,5 +259,13 @@ public class RecursiveCraft : Mod
 
 		foreach (int availableRecipe in sortedAvailableRecipes)
 			Main.availableRecipe[Main.numAvailableRecipes++] = availableRecipe;
+	}
+}
+
+public class RecursiveCraftSystem : ModSystem
+{
+	public override void PostSetupRecipes()
+    {
+		((RecursiveCraft) Mod).DiscoverRecipes();
 	}
 }

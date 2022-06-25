@@ -12,9 +12,9 @@ public class CompoundRecipe
 	public int RecipeId;
 	public RecipeInfo RecipeInfo = null!;
 
-	public CompoundRecipe(Mod mod)
+	public CompoundRecipe()
 	{
-		Compound = mod.CreateRecipe(0);
+		Compound = Recipe.Create(0);
 		Compound.AddConsumeItemCallback(ConsumeItem);
 		Compound.AddOnCraftCallback(OnCraft);
 	}
