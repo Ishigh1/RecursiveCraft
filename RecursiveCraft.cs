@@ -61,11 +61,6 @@ public class RecursiveCraft : Mod
 		InventoryChecks = null!;
 	}
 
-	public override void PostAddRecipes()
-	{
-		CompoundRecipe = new CompoundRecipe();
-	}
-
 	public override object Call(params object[] args)
 	{
 		if (args.Length == 1 && "DiscoverRecipes".Equals(args[0]))
@@ -264,6 +259,12 @@ public class RecursiveCraft : Mod
 
 public class RecursiveCraftSystem : ModSystem
 {
+
+	public override void PostAddRecipes()
+	{
+		RecursiveCraft.CompoundRecipe = new CompoundRecipe();
+	}
+	
 	public override void PostSetupRecipes()
     {
 		((RecursiveCraft) Mod).DiscoverRecipes();
