@@ -1,4 +1,4 @@
 displayName = Recursive Craft
 author = Ishigh
-version = 2.0.0.10
+version = 2.0.1.1
 homepage = https://github.com/Ishigh1/RecursiveCraft

@@ -40,7 +40,7 @@ public class RecursiveCraft : Mod
 		{
 			() => Main.playerInventory
 		};
-		
+
 		ILRecipe.FindRecipes += ApplyRecursiveSearch;
 		OnMain.DrawInventory += EditFocusRecipe;
 		OnMain.Update += ApplyKey;
@@ -54,14 +54,14 @@ public class RecursiveCraft : Mod
 
 		Hotkeys = null!;
 
-		if (CompoundRecipe?.OverridenRecipe != null) // ?. required because tml loading is not perfect
+		if (CompoundRecipe?.OverridenRecipe != null) // ?. required because tml loading may have failed
 			Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
 		CompoundRecipe = null!;
 
 		InventoryChecks = null!;
 	}
 
-	public override object Call(params object[] args)
+	public override object? Call(params object[] args)
 	{
 		if (args.Length == 1 && "DiscoverRecipes".Equals(args[0]))
 		{
@@ -105,7 +105,7 @@ public class RecursiveCraft : Mod
 			foreach (Item ingredient in recipe.requiredItem)
 			{
 				if (ingredient.type == ItemID.None) break;
-				foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipe, ingredient))
+				foreach (int possibleIngredient in RecursiveSearch.ListAllIngredient(recipe, ingredient.type))
 				{
 					if (RecipeByResult.TryGetValue(possibleIngredient, out List<Recipe> list))
 						cost += list.Count * ingredient.stack;
@@ -259,14 +259,13 @@ public class RecursiveCraft : Mod
 
 public class RecursiveCraftSystem : ModSystem
 {
-
-	public override void PostAddRecipes()
+	public override void AddRecipes()
 	{
 		RecursiveCraft.CompoundRecipe = new CompoundRecipe();
 	}
-	
+
 	public override void PostSetupRecipes()
-    {
-		((RecursiveCraft) Mod).DiscoverRecipes();
+	{
+		((RecursiveCraft)Mod).DiscoverRecipes();
 	}
 }

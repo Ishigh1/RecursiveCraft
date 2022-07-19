@@ -30,7 +30,7 @@ public class RecursiveSearch
 	{
 		CraftingState = new CraftingState(Inventory);
 		bool craftable = CraftableAmount(recipe, recipe.createItem.stack * timeCraft,
-			recipe.createItem.stack * timeCraft, new List<int>()).Item1 > 0;
+			recipe.createItem.stack * timeCraft, new HashSet<int>()).Item1 > 0;
 		if (timeCraft == 1)
 			PossibleCraftCache[recipe] = craftable;
 		return !craftable ? null : CreateRecipeInfo();
@@ -61,13 +61,13 @@ public class RecursiveSearch
 		return new RecipeInfo(usedItems, trueUsedItems, CraftingState.RecipeUsed);
 	}
 
-	public (int, int) CraftableAmount(Recipe recipe, int amount, int trueAmount, List<int> forbiddenItems)
+	public (int, int) CraftableAmount(Recipe recipe, int amount, int trueAmount, HashSet<int> forbiddenItems)
 	{
 		if (!IsAvailable(recipe)) return (0, 0);
 		CraftingState oldState = CraftingState;
 		CraftingState = new CraftingState(oldState);
 
-		List<int> newForbiddenItems = forbiddenItems.ToList();
+		HashSet<int> newForbiddenItems = new(forbiddenItems);
 
 		int timeCraft = (amount + recipe.createItem.stack - 1) / recipe.createItem.stack;
 		int trueTimeCraft = (trueAmount + recipe.createItem.stack - 1) / recipe.createItem.stack;
@@ -79,20 +79,19 @@ public class RecursiveSearch
 			int trueIngredientsNeeded =
 				trueTimeCraft * ingredient.stack - DiscountRecipe(recipe, trueTimeCraft, ingredient);
 
-			List<int> ingredientList = ListAllIngredient(recipe, ingredient);
+			HashSet<int> ingredientList = ListAllIngredient(recipe, ingredient.type);
 
-			ingredientList.RemoveAll(forbiddenItems.Contains);
+			ingredientList.ExceptWith(forbiddenItems);
 
 			UseExistingIngredients(ingredientList, ref ingredientsNeeded, ref trueIngredientsNeeded);
 
 			if (ingredientsNeeded > 0 && MaxDepth - CraftingState.Depth != 0)
 			{
-				if (!newForbiddenItems.Contains(recipe.createItem.type))
-					newForbiddenItems.Add(recipe.createItem.type);
+				newForbiddenItems.Add(recipe.createItem.type);
+
 				foreach (int validItem in ingredientList)
 				{
-					UseIngredientFromRecipe(newForbiddenItems,
-						validItem, ref ingredientsNeeded, ref trueIngredientsNeeded);
+					UseIngredientFromRecipe(newForbiddenItems, validItem, ref ingredientsNeeded, ref trueIngredientsNeeded);
 
 					if (ingredientsNeeded <= 0)
 						break;
@@ -126,11 +125,9 @@ public class RecursiveSearch
 		}
 	}
 
-	public void UseIngredientFromRecipe(List<int> newForbiddenItems,
-		int validItem, ref int ingredientsNeeded, ref int trueIngredientsNeeded)
+	public void UseIngredientFromRecipe(HashSet<int> newForbiddenItems, int validItem, ref int ingredientsNeeded, ref int trueIngredientsNeeded)
 	{
-		if (!newForbiddenItems.Contains(validItem) &&
-		    RecursiveCraft.RecipeByResult.TryGetValue(validItem, out List<Recipe>? usableRecipes))
+		if (!newForbiddenItems.Contains(validItem) && RecursiveCraft.RecipeByResult.TryGetValue(validItem, out List<Recipe>? usableRecipes))
 			foreach (Recipe ingredientRecipe in usableRecipes)
 			{
 				(int craftedAmount, int trueCraftedAmount) = CraftableAmount(ingredientRecipe, ingredientsNeeded,
@@ -161,18 +158,16 @@ public class RecursiveSearch
 		return discount;
 	}
 
-	public static List<int> ListAllIngredient(Recipe recipe, Item ingredient)
+	public static HashSet<int> ListAllIngredient(Recipe recipe, int ingredient)
 	{
-		List<int> ingredientList = new();
+		HashSet<int> ingredientList = new() { ingredient };
 
-		foreach (int validItem in recipe.acceptedGroups
+		foreach (RecipeGroup recipeGroup in
+		         recipe.acceptedGroups
 			         .Select(recipeAcceptedGroup => RecipeGroup.recipeGroups[recipeAcceptedGroup])
-			         .Where(recipeGroup => recipeGroup.ContainsItem(ingredient.netID)).SelectMany(recipeGroup =>
-				         recipeGroup.ValidItems.Where(validItem => !ingredientList.Contains(validItem))))
-			ingredientList.Add(validItem);
+			         .Where(recipeGroup => recipeGroup.ContainsItem(ingredient)))
+			ingredientList.UnionWith(recipeGroup.ValidItems);
 
-		if (ingredientList.Count == 0)
-			ingredientList.Add(ingredient.type);
 		return ingredientList;
 	}
 
