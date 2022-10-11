@@ -49,7 +49,7 @@ public class CompoundRecipe
 			amount = 0;
 	}
 
-	public void OnCraft(Recipe _, Item item)
+	public void OnCraft(Recipe _, Item item, List<Item> consumedItems)
 	{
 		foreach ((int type, int stack) in RecipeInfo.TrueUsedItems.Where(keyValuePair => keyValuePair.Value < 0))
 			Main.LocalPlayer.QuickSpawnItem(null, type, -stack); //I don't like this null but can't find better
