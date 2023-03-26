@@ -49,7 +49,7 @@ public class CompoundRecipe
 			amount = 0;
 	}
 
-	public void OnCraft(Recipe _, Item item, List<Item> consumedItems, Item destinationStack)
+	public void OnCraft(Recipe _, Item item, List<Item> consumedItems)
 	{
 		foreach ((int type, int stack) in RecipeInfo.TrueUsedItems.Where(keyValuePair => keyValuePair.Value < 0))
 			Main.LocalPlayer.QuickSpawnItem(null, type, -stack); //I don't like this null but can't find better
@@ -65,7 +65,7 @@ public class CompoundRecipe
 				: new Item(recipe.createItem.type, recipe.createItem.stack);
 
 			for (int j = 0; j < timesCrafted; j++)
-				RecipeLoader.OnCraft(targetItem, recipe, destinationStack);
+				RecipeLoader.OnCraft(targetItem, recipe);
 
 			//This still doesn't take into account any OnCraft editing intermediate recipe result
 		}
