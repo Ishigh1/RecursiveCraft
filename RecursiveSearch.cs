@@ -218,6 +218,8 @@ public class RecursiveSearch
 
 	public bool IsAvailable(Recipe recipe)
 	{
+		if (recipe.Disabled)
+			return false;
 		if (PossibleCraftCache.TryGetValue(recipe, out bool craftable) && !craftable)
 			return false;
 		if (!RecipeLoader.RecipeAvailable(recipe))

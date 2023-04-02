@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Microsoft.Xna.Framework;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
-using ILRecipe = IL.Terraria.Recipe;
-using OnMain = On.Terraria.Main;
 
 namespace RecursiveCraft;
 
@@ -41,9 +41,9 @@ public class RecursiveCraft : Mod
 			() => Main.playerInventory
 		};
 
-		ILRecipe.FindRecipes += ApplyRecursiveSearch;
-		OnMain.DrawInventory += EditFocusRecipe;
-		OnMain.Update += ApplyKey;
+		IL_Recipe.FindRecipes += ApplyRecursiveSearch;
+		On_Main.DrawInventory += EditFocusRecipe;
+		On_Main.Update += ApplyKey;
 	}
 
 	public override void Unload()
@@ -143,7 +143,7 @@ public class RecursiveCraft : Mod
 		return InventoryIsOpen == wasOpen;
 	}
 
-	public void ApplyKey(OnMain.orig_Update orig, Main self, GameTime gameTime)
+	public void ApplyKey(On_Main.orig_Update orig, Main self, GameTime gameTime)
 	{
 		if (UpdateInventoryState())
 			DepthSearch = ((RecursiveSettings)GetConfig("RecursiveSettings")).DefaultDepth;
@@ -183,7 +183,7 @@ public class RecursiveCraft : Mod
 		orig(self, gameTime);
 	}
 
-	public static void EditFocusRecipe(OnMain.orig_DrawInventory orig, Main self)
+	public static void EditFocusRecipe(On_Main.orig_DrawInventory orig, Main self)
 	{
 		if (CompoundRecipe.OverridenRecipe != null)
 			Main.recipe[CompoundRecipe.RecipeId] = CompoundRecipe.OverridenRecipe;
@@ -205,35 +205,40 @@ public class RecursiveCraft : Mod
 	public static void ApplyRecursiveSearch(ILContext il)
 	{
 		ILCursor cursor = new(il);
-		/*
-		 * Go before 'for (int n = 0; n < maxRecipes && Main.recipe[n].createItem.type != 0; n++)' that is after the
-		 * 'for (int m = 0; m < 40; m++)' loop
-		 */
-
+		
+		foreach (Instruction cursorInstr in cursor.Instrs)
+		{
+			if (cursorInstr.OpCode == OpCodes.Call)
+			{
+				Math.Sqrt(5);
+			}
+		}
+		
+		// Go after 'CollectItemsToCraftWithFrom(localPlayer);'
 		if (!cursor.TryGotoNext(MoveType.After,
-			    instruction => instruction.OpCode == OpCodes.Blt_S && instruction.Previous.MatchLdcI4(40)))
+			    instruction => instruction.OpCode == OpCodes.Call && ((MethodReference) instruction.Operand).Name == "CollectItemsToCraftWithFrom"))
 			throw new Exception("The first hook on ApplyRecursiveSearch wasn't found");
 
 		ILLabel label = cursor.DefineLabel();
 		IEnumerable<ILLabel> incomingLabels = cursor.IncomingLabels.ToList();
 		foreach (ILLabel cursorIncomingLabel in incomingLabels) cursor.MarkLabel(cursorIncomingLabel);
 
-		cursor.Emit(OpCodes.Ldloc, 6); //Inventory
 		cursor.Emit(OpCodes.Call, typeof(RecursiveCraft).GetMethod(nameof(FindRecipes)));
 		cursor.Emit(OpCodes.Br_S, label);
 
-		// Go before 'for (int num7 = 0; num7 < Main.numAvailableRecipes; num7++)'
-		if (!cursor.TryGotoNext(MoveType.Before,
-			    instruction => instruction.OpCode == OpCodes.Ldc_I4_0 &&
-			                   instruction.Previous.OpCode == OpCodes.Brtrue &&
-			                   instruction.Next.MatchStloc(25)))
+		// Go before 'TryRefocusingRecipe(oldRecipe)'
+		
+		if (!cursor.TryGotoNext(MoveType.After,
+			    instruction => instruction.OpCode == OpCodes.Call && ((MethodReference) instruction.Operand).Name == "TryRefocusingRecipe"))
 			throw new Exception("The second hook on ApplyRecursiveSearch wasn't found");
-
+		cursor.GotoPrev();
 		cursor.MarkLabel(label);
 	}
 
-	public static void FindRecipes(Dictionary<int, int> inventory)
+	public static void FindRecipes()
 	{
+		Dictionary<int, int> inventory =
+			(Dictionary<int, int>)typeof(Recipe).GetField("_ownedItems", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
 		RecipeInfoCache.Clear();
 		RecursiveSearch recursiveSearch = new(inventory);
 
