@@ -141,17 +141,17 @@ public class RecursiveSearch
 	public static int DiscountRecipe(Recipe recipe, int trueTimeCraft, Item ingredient)
 	{
 		PropertyInfo propertyInfo =
-			typeof(Recipe).GetProperty("ConsumeItemHooks", BindingFlags.Instance | BindingFlags.NonPublic)!;
-		Recipe.ConsumeItemCallback? consumeItemHooks =
-			(Recipe.ConsumeItemCallback?)propertyInfo.GetMethod!.Invoke(recipe, null);
-		if (consumeItemHooks == null)
+			typeof(Recipe).GetProperty("ConsumeIngredientHooks", BindingFlags.Instance | BindingFlags.NonPublic)!;
+		Recipe.IngredientQuantityCallback? ingredientQuantityHooks =
+			(Recipe.IngredientQuantityCallback?)propertyInfo.GetMethod!.Invoke(recipe, null);
+		if (ingredientQuantityHooks == null)
 			return 0;
 
 		int discount = 0;
 		for (int i = 0; i < trueTimeCraft; i++)
 		{
 			int consumedItems = ingredient.stack;
-			consumeItemHooks(recipe, ingredient.type, ref consumedItems);
+			ingredientQuantityHooks(recipe, ingredient.type, ref consumedItems, false);
 			discount += ingredient.stack - consumedItems;
 		}
 

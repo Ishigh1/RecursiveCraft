@@ -1,0 +1,17 @@
+Keybinds: {
+	"Infinite crafting depth.DisplayName": Infinite crafting depth
+	"+1 crafting depth.DisplayName": +1 crafting depth
+	"-1 crafting depth.DisplayName": -1 crafting depth
+	"No crafting depth.DisplayName": No crafting depth
+}
+
+Configs: {
+	RecursiveSettings: {
+		DisplayName: Recursive Settings
+
+		DefaultDepth: {
+			Label: Max recursive depth
+			Tooltip: Max number of different recipes that can be used to obtain an ingredient
+		}
+	}
+}
